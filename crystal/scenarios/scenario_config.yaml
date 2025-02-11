@@ -1,0 +1,5 @@
+battery_capacity: 100
+duration: 48
+efficiency: 0.9
+fcr_allocation: 50
+name: Test Scenario
