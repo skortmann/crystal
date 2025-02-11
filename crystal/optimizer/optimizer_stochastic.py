@@ -10,9 +10,9 @@ import pyomo.opt as po
 
 
 class energy_arbitrage_stochastic_optimizer:
-    def __init__(self, name):
+    def __init__(self, name, risk_factor):
         self.name: str = name
-        self.risk_factor = 0.05
+        self.risk_factor = risk_factor
 
     def optimize_daa(self, n_cycles: int, energy_cap: int, power_cap: int, quantile_forecasts):
         """

@@ -37,7 +37,23 @@ def sample_runner(name, duration, battery_capacity, fcr_allocation, **kwargs):
         print(f"{key}: {value}")
     return "Run completed."
 
+def run_optimization(battery_capacity, battery_power, risk_factor, **kwargs):
+    print(f"Running optimization with:")
+    print(f"Battery Capacity: {battery_capacity} kWh")
+    print(f"Battery Power: {battery_power} kW")
+    print(f"Risk Factor: {risk_factor}")
+    return "Run completed."
+
 if __name__ == "__main__":
+
+    # Run all scenarios and save their configurations
+    for scenario in scenarios:
+        scenario.parameters['result_dir'] = paths.get_scenario_results_path(scenario.parameters['name'])
+        scenario_yaml_path = os.path.join(scenario.parameters['result_dir'], "config.yaml")
+        scenario.to_yaml(scenario_yaml_path)
+        result = scenario.run(sample_runner)
+        print(result)
+
     data_preprocessing = False
     train_forecasting = False
     do_forecasting = False
@@ -197,9 +213,10 @@ if __name__ == "__main__":
 
     if run_optimization:
         print(f"Running optimization sequentially")
-        optimizer_stochastic_flex = energy_arbitrage_stochastic_optimizer("sequential_decision_making")
+        optimizer_stochastic_flex = energy_arbitrage_stochastic_optimizer("sequential_decision_making", risk_factor=0.2)
 
         forecast_results = {} # Store forecast results for each market
+
         # Load the true price vectors for each market
         for market in ['daa', 'ida', 'idc']:
             market_data[market] = pd.read_csv(paths.data_dir / f"{market}_price_vector_full.csv",
@@ -295,20 +312,15 @@ if __name__ == "__main__":
                 'cummulated_profit': revenue_total,
             })
 
+        print("Sequential optimization completed.")
+        print("Total revenue: ", revenue_total)
+
         # Save the daily optimization results to a CSV
         optimization_results_df = pd.DataFrame(optimization_results)
         optimization_file = paths.results_dir / "daily_optimization_results.csv"
         optimization_results_df.to_csv(optimization_file, index=False)
 
         print(f"Daily optimization results saved to {optimization_file}.")
-
-        # # Run all scenarios and save their configurations
-        # for scenario in scenarios:
-        #     scenario.parameters['result_dir'] = paths.get_scenario_results_path(scenario.parameters['name'])
-        #     scenario_yaml_path = os.path.join(scenario.parameters['result_dir'], "config.yaml")
-        #     scenario.to_yaml(scenario_yaml_path)
-        #     result = scenario.run(sample_runner)
-        #     print(result)
 
     if post_processing:
         pass

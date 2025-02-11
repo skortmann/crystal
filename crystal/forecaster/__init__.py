@@ -8,4 +8,4 @@ Copyright (c) by Institute for High Voltage Equipment and Grids,
 Digitalization and Energy Economics (IAEW), RWTH Aachen University, 
 10.02.2025, s.kortmann. All rights reserved.
 """
-from .forecasting_DAA_IDA import Forecaster
+from .forecasting import Forecaster
