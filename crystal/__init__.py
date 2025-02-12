@@ -13,5 +13,5 @@ from .scenarios import Scenario
 from .io import read_csv_data
 from .forecaster import Forecaster
 from .metrics import compute_metrics
-from .optimizer import energy_arbitrage_stochastic_optimizer
+from .optimizer import energy_arbitrage_stochastic_optimizer, SequentialEnergyArbitrage
 from .plotting import plot_forecast_results

@@ -21,7 +21,7 @@ from crystal import (
     io,
     forecaster,
     compute_metrics,
-    energy_arbitrage_stochastic_optimizer,
+    SequentialEnergyArbitrage,
     plot_forecast_results,
 )
 
@@ -34,55 +34,95 @@ optimization_scenarios = [
         name="Risk Low",
         battery_capacity=1,
         battery_power=1,
+        cyclic_constraint=True,
         risk_factor=0.125,
-        objective="maximize_profit",
+        objective="risk",
+        optimization_method="Fixed",
     ),
     Scenario(
         name="Risk Medium",
         battery_capacity=1,
         battery_power=1,
+        cyclic_constraint=True,
         risk_factor=0.25,
-        objective="maximize_profit",
+        objective="risk",
+        optimization_method="Fixed",
     ),
     Scenario(
         name="Risk High",
         battery_capacity=1,
         battery_power=1,
+        cyclic_constraint=True,
         risk_factor=0.4,
-        objective="maximize_profit",
+        objective="risk",
+        optimization_method="Fixed",
+    ),
+    Scenario(
+        name="No Risk Penalty",
+        battery_capacity=1,
+        battery_power=1,
+        cyclic_constraint=True,
+        risk_factor=0.0,
+        objective="risk",
+        optimization_method="Fixed",
     ),
     Scenario(
         name="Risk Adaptive",
         battery_capacity=1,
         battery_power=1,
-        risk_factor=0,
-        objective="maximize_profit",
+        cyclic_constraint=True,
+        risk_factor=0.0,
+        objective="risk",
+        optimization_method="Adaptive",
     ),
 ]
 
 
 def optimization_runner(
-    name, battery_capacity, battery_power, risk_factor, objective, **kwargs
+    name,
+    battery_capacity,
+    battery_power,
+    cyclic_constraint,
+    risk_factor,
+    optimization_method,
+    objective,
+    **kwargs,
 ):
     """
-    Runs energy arbitrage stochastic optimization for a given scenario.
+    Runs the SequentialEnergyArbitrage optimization framework for a given scenario.
+
+    Parameters:
+    - name: str -> Scenario name.
+    - battery_capacity: int -> Energy capacity of the battery (MWh).
+    - battery_power: int -> Power capacity of the battery (MW).
+    - risk_factor: float -> Risk adjustment factor.
+    - optimization_method: str -> Strategy name (e.g., "Risk Adaptive", "Risk High").
+    - kwargs: dict -> Additional arguments (e.g., result directory).
+
+    Returns:
+    - revenue_total: float -> Total revenue for the scenario.
     """
     print(f"\n⚡ Running Optimization for Scenario: {name}\n")
 
-    optimizer_stochastic_flex = energy_arbitrage_stochastic_optimizer(
-        name=name,
+    # Initialize the optimizer
+    optimizer = SequentialEnergyArbitrage(
+        energy_capacity=battery_capacity,
+        power_capacity=battery_power,
         risk_factor=risk_factor,
-        objective_function=objective,
+        optimization_method=optimization_method,
+        cyclic_constraint=cyclic_constraint,
+        objective=objective,
     )
 
     optimization_results = []
     revenue_total = 0
 
+    # Loop through each day in the forecast data
     for day_start in tqdm(
         forecast_results["idc"]["timestamp"][::96], desc=f"Optimizing {name}"
     ):
         try:
-            # Load day-ahead forecasts
+            # Load Day-Ahead Auction (DAA) forecasts
             day_forecasts_daa_subset = forecast_results["daa"].loc[
                 (forecast_results["daa"]["timestamp"] >= day_start)
                 & (
@@ -95,7 +135,7 @@ def optimization_runner(
                 & (market_data["daa"]["timestamp"] < day_start + pd.Timedelta(hours=24))
             ]["value"]
 
-            # Extend DAA price vector
+            # Extend DAA price vector to match time steps
             daa_price_vector_true = np.repeat(daa_price_vector_true.to_numpy(), 4)
 
             if len(day_forecasts_daa_subset) < 24 or len(daa_price_vector_true) < 96:
@@ -109,21 +149,12 @@ def optimization_runner(
                 day_forecasts_daa_subset[f"{q:.1f}"].values
                 for q in np.arange(0.1, 1.0, 0.1)
             ]
-            quantiles_daa = [
-                np.repeat(q, 4) for q in quantiles_daa
-            ]  # Extend DAA forecasts
+            quantiles_daa = [np.repeat(q, 4) for q in quantiles_daa]  # Extend forecasts
 
             # Optimize DAA
-            step1_soc_daa, step1_cha_daa, step1_dis_daa, step1_profit_daa = (
-                optimizer_stochastic_flex.optimize_daa(
-                    n_cycles=1,
-                    energy_cap=battery_capacity,
-                    power_cap=battery_power,
-                    quantile_forecasts=quantiles_daa,
-                )
-            )
+            results_daa = optimizer.optimizeDAA(quantiles_daa)
 
-            # Load IDA forecasts
+            # Load Intraday Auction (IDA) forecasts
             day_forecasts_ida_subset = forecast_results["ida"].loc[
                 (forecast_results["ida"]["timestamp"] >= day_start)
                 & (
@@ -141,25 +172,10 @@ def optimization_runner(
                 for q in np.arange(0.1, 1.0, 0.1)
             ]
 
-            (
-                step2_soc_ida,
-                step2_cha_ida,
-                step2_dis_ida,
-                step2_cha_ida_close,
-                step2_dis_ida_close,
-                step2_profit_ida,
-                step2_cha_daaida,
-                step2_dis_daaida,
-            ) = optimizer_stochastic_flex.optimize_ida(
-                n_cycles=1,
-                energy_cap=battery_capacity,
-                power_cap=battery_power,
-                step1_cha_daa=step1_cha_daa,
-                step1_dis_daa=step1_dis_daa,
-                quantile_forecasts=quantiles_ida,
-            )
+            # Optimize IDA
+            results_ida = optimizer.optimizeIDA(quantiles_ida, results_daa)
 
-            # Handle IDC forecasts
+            # Load Intraday Continuous (IDC) forecasts
             day_forecasts_idc_subset = forecast_results["idc"].loc[
                 (forecast_results["idc"]["timestamp"] >= day_start)
                 & (
@@ -177,71 +193,58 @@ def optimization_runner(
                 for q in np.arange(0.1, 1.0, 0.1)
             ]
 
-            (
-                step3_soc_idc,
-                step3_cha_idc,
-                step3_dis_idc,
-                step3_cha_idc_close,
-                step3_dis_idc_close,
-                step3_profit_idc,
-                step3_cha_daaidaidc,
-                step3_dis_daaidaidc,
-            ) = optimizer_stochastic_flex.optimize_idc(
-                n_cycles=1,
-                energy_cap=battery_capacity,
-                power_cap=battery_power,
-                step2_cha_daaida=step2_cha_daaida,
-                step2_dis_daaida=step2_dis_daaida,
-                quantile_forecasts=quantiles_idc,
-            )
+            # Optimize IDC
+            results_idc = optimizer.optimizeIDC(quantiles_idc, results_ida)
 
             # Calculate daily profits
-            dt = 1 / 4
-            revenue_daa_today_stoc = (
+            dt = 1 / 4  # Since each time step is 15 minutes
+            revenue_daa_today = (
                 np.sum(
                     daa_price_vector_true
-                    * (np.asarray(step1_dis_daa) - np.asarray(step1_cha_daa))
+                    * (
+                        np.asarray(results_daa["p_discharge_daa"])
+                        - np.asarray(results_daa["p_charge_daa"])
+                    )
                 )
                 * dt
             )
-            revenue_ida_today_stoc = (
+            revenue_ida_today = (
                 np.sum(
                     ida_price_vector_true
                     * (
-                        np.asarray(step2_dis_ida)
-                        + np.asarray(step2_dis_ida_close)
-                        - np.asarray(step2_cha_ida)
-                        - np.asarray(step2_cha_ida_close)
+                        np.asarray(results_ida["p_discharge_ida"])
+                        + np.asarray(results_ida["p_discharge_ida_close"])
+                        - np.asarray(results_ida["p_charge_ida"])
+                        - np.asarray(results_ida["p_charge_ida_close"])
                     )
                 )
                 * dt
             )
-            revenue_idc_today_stoc = (
+            revenue_idc_today = (
                 np.sum(
                     idc_price_vector_true
                     * (
-                        np.asarray(step3_dis_idc)
-                        + np.asarray(step3_dis_idc_close)
-                        - np.asarray(step3_cha_idc)
-                        - np.asarray(step3_cha_idc_close)
+                        np.asarray(results_idc["p_discharge_idc"])
+                        + np.asarray(results_idc["p_discharge_idc_close"])
+                        - np.asarray(results_idc["p_charge_idc"])
+                        - np.asarray(results_idc["p_charge_idc_close"])
                     )
                 )
                 * dt
             )
 
-            revenue_total += (
-                revenue_daa_today_stoc + revenue_ida_today_stoc + revenue_idc_today_stoc
-            )
+            revenue_total += revenue_daa_today + revenue_ida_today + revenue_idc_today
 
+            # Store results for the day
             optimization_results.append(
                 {
                     "day": day_start,
-                    "revenue_daa": revenue_daa_today_stoc,
-                    "revenue_ida": revenue_ida_today_stoc,
-                    "revenue_idc": revenue_idc_today_stoc,
-                    "daily_profit": revenue_daa_today_stoc
-                    + revenue_ida_today_stoc
-                    + revenue_idc_today_stoc,
+                    "revenue_daa": revenue_daa_today,
+                    "revenue_ida": revenue_ida_today,
+                    "revenue_idc": revenue_idc_today,
+                    "daily_profit": revenue_daa_today
+                    + revenue_ida_today
+                    + revenue_idc_today,
                     "cumulative_profit": revenue_total,
                 }
             )
@@ -254,7 +257,10 @@ def optimization_runner(
     print(f"💰 Total Revenue: {revenue_total}")
 
     # Save results per scenario
-    scenario_file = Path(kwargs["result_dir"]) / f"optimization_results_{name}.csv"
+    result_dir = kwargs.get("result_dir", "./results")  # Default directory
+    Path(result_dir).mkdir(parents=True, exist_ok=True)
+    scenario_file = Path(result_dir) / f"optimization_results_{name}.csv"
+
     pd.DataFrame(optimization_results).to_csv(scenario_file, index=False)
 
     print(f"📁 Results Saved: {scenario_file}")
@@ -262,10 +268,10 @@ def optimization_runner(
 
 
 if __name__ == "__main__":
-    data_preprocessing = True
-    train_forecasting = True
-    do_forecasting = True
-    evaluate_forecasting = True
+    data_preprocessing = False
+    train_forecasting = False
+    do_forecasting = False
+    evaluate_forecasting = False
     do_optimization = True
     post_processing = True
 
@@ -310,10 +316,10 @@ if __name__ == "__main__":
             # **Train-Test Split (Time-Based)**
             day_start_time = pd.to_datetime("2021-10-01 00:00:00")
             day_end_time = pd.to_datetime("2022-01-10 23:45:00")
-            df_train = df_market.loc[df_market["timestamp"] <= day_start_time]
+            df_train = df_market.loc[df_market["timestamp"] < day_start_time]
             df_test = df_market.loc[
-                (df_market["timestamp"] > day_start_time)
-                & (df_market["timestamp"] <= day_end_time)
+                (df_market["timestamp"] >= day_start_time)
+                & (df_market["timestamp"] < day_end_time)
             ]
 
             # Save test set separately for later evaluation
