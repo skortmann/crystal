@@ -5,13 +5,16 @@ import os
 
 WEEKEND_INDICES = [5, 6]
 
+
 class Forecaster:
-    def __init__(self,
-                 market: str,
-                 model_path: str,
-                 prediction_length: int,
-                 target_column: str = 'value',
-                 eval_metric: str = 'WQL'):
+    def __init__(
+        self,
+        market: str,
+        model_path: str,
+        prediction_length: int,
+        target_column: str = "value",
+        eval_metric: str = "WQL",
+    ):
         """
         Initializes the Forecaster class.
 
@@ -35,14 +38,12 @@ class Forecaster:
         Parameters:
         - df (pd.DataFrame): Time series data with 'timestamp' and target column.
         """
-        df['item_id'] = 1  # Assuming a single item for simplicity
-        df = df.drop(columns=['Date'])
+        df["item_id"] = 1  # Assuming a single item for simplicity
+        df = df.drop(columns=["Date"])
 
         # Convert DataFrame to TimeSeriesDataFrame
         train_data = TimeSeriesDataFrame.from_data_frame(
-            df,
-            id_column='item_id',
-            timestamp_column='timestamp'
+            df, id_column="item_id", timestamp_column="timestamp"
         )
 
         # Initialize and train the predictor
@@ -51,27 +52,38 @@ class Forecaster:
             prediction_length=self.prediction_length,
             target=self.target_column,
             eval_metric=self.eval_metric,
-            freq="15min" if self.market in ['ida', 'idc'] else "1h",
-            known_covariates_names=['year', 'month', 'day', 'dayofweek', 'hour', 'minute', 'weekend',
-                                    'sin_day_of_week', 'cos_day_of_week', 'sin_hour_of_day', 'cos_hour_of_day'],
+            freq="15min" if self.market in ["ida", "idc"] else "1h",
+            known_covariates_names=[
+                "year",
+                "month",
+                "day",
+                "dayofweek",
+                "hour",
+                "minute",
+                "weekend",
+                "sin_day_of_week",
+                "cos_day_of_week",
+                "sin_hour_of_day",
+                "cos_hour_of_day",
+            ],
         )
 
         self.predictor.fit(
             train_data,
             hyperparameters={
-                'DeepAR': {},
-                'DLinear': {},
-                'PatchTST': {},
-                'SimpleFeedForward': {},
-                'TemporalFusionTransformer': {},
-                'TiDE': {},
-                'WaveNet': {},
+                "DeepAR": {},
+                "DLinear": {},
+                "PatchTST": {},
+                "SimpleFeedForward": {},
+                "TemporalFusionTransformer": {},
+                "TiDE": {},
+                "WaveNet": {},
             },
             num_val_windows=10,
-            refit_full=True,
+            # refit_full=True,
             refit_every_n_windows=2,
-            time_limit=60*30,
-            presets='best_quality',
+            time_limit=60 * 6,
+            presets="best_quality",
             excluded_model_types=["Chronos"],
         )
 
@@ -91,7 +103,9 @@ class Forecaster:
             self.predictor.save()
             print(f"Model successfully saved at {self.model_path}.")
         else:
-            raise ValueError("No trained model available to save. Please train the model first.")
+            raise ValueError(
+                "No trained model available to save. Please train the model first."
+            )
 
     def load(self):
         """
@@ -101,7 +115,9 @@ class Forecaster:
             self.predictor = TimeSeriesPredictor.load(self.model_path)
             print(f"Model loaded from {self.model_path}.")
         else:
-            raise ValueError(f"No model found at {self.model_path}. Please train and save the model first.")
+            raise ValueError(
+                f"No model found at {self.model_path}. Please train and save the model first."
+            )
 
     def predict(self, df):
         """
@@ -120,38 +136,59 @@ class Forecaster:
 
         # Convert to TimeSeriesDataFrame
         prediction_data = TimeSeriesDataFrame.from_data_frame(
-            df,
-            id_column='item_id',
-            timestamp_column='timestamp'
+            df, id_column="item_id", timestamp_column="timestamp"
         )
 
-        from autogluon.timeseries.utils.forecast import get_forecast_horizon_index_ts_dataframe
+        from autogluon.timeseries.utils.forecast import (
+            get_forecast_horizon_index_ts_dataframe,
+        )
 
-        future_index = get_forecast_horizon_index_ts_dataframe(prediction_data, prediction_length=self.prediction_length)
+        future_index = get_forecast_horizon_index_ts_dataframe(
+            prediction_data, prediction_length=self.prediction_length
+        )
         future_timestamps = future_index.get_level_values("timestamp")
         known_covariates = pd.DataFrame(index=future_index)
-        known_covariates["weekend"] = future_timestamps.weekday.isin(WEEKEND_INDICES).astype(float)
-        # known_covariates['year'] = future_timestamps.year
-        known_covariates['month'] = future_timestamps.month
-        # known_covariates['day'] = future_timestamps.day
-        known_covariates['dayofweek'] = future_timestamps.dayofweek
-        # known_covariates['hour'] = future_timestamps.hour
-        # known_covariates['minute'] = future_timestamps.minute
+        known_covariates["weekend"] = future_timestamps.weekday.isin(
+            WEEKEND_INDICES
+        ).astype(float)
+        known_covariates["year"] = future_timestamps.year
+        known_covariates["month"] = future_timestamps.month
+        known_covariates["day"] = future_timestamps.day
+        known_covariates["dayofweek"] = future_timestamps.dayofweek
+        known_covariates["hour"] = future_timestamps.hour
+        known_covariates["minute"] = future_timestamps.minute
 
         # Cyclical encoding for time-based features
-        known_covariates["sin_day_of_week"] = np.sin(2 * np.pi * known_covariates["dayofweek"] / 7)
-        known_covariates["cos_day_of_week"] = np.cos(2 * np.pi * known_covariates["dayofweek"] / 7)
+        known_covariates["sin_day_of_week"] = np.sin(
+            2 * np.pi * known_covariates["dayofweek"] / 7
+        )
+        known_covariates["cos_day_of_week"] = np.cos(
+            2 * np.pi * known_covariates["dayofweek"] / 7
+        )
 
         if self.prediction_length == 96:  # 15-minute intervals
-            known_covariates["sin_hour_of_day"] = np.sin(2 * np.pi * known_covariates["minute"] / (self.prediction_length * 15))
-            known_covariates["cos_hour_of_day"] = np.cos(2 * np.pi * known_covariates["minute"] / (self.prediction_length * 15))
+            known_covariates["sin_hour_of_day"] = np.sin(
+                2 * np.pi * known_covariates["minute"] / (self.prediction_length * 15)
+            )
+            known_covariates["cos_hour_of_day"] = np.cos(
+                2 * np.pi * known_covariates["minute"] / (self.prediction_length * 15)
+            )
         else:  # Hourly intervals
-            known_covariates["sin_hour_of_day"] = np.sin(2 * np.pi * known_covariates["hour"] / self.prediction_length)
-            known_covariates["cos_hour_of_day"] = np.cos(2 * np.pi * known_covariates["hour"] / self.prediction_length)
+            known_covariates["sin_hour_of_day"] = np.sin(
+                2 * np.pi * known_covariates["hour"] / self.prediction_length
+            )
+            known_covariates["cos_hour_of_day"] = np.cos(
+                2 * np.pi * known_covariates["hour"] / self.prediction_length
+            )
+
+        # known_covariates.drop(columns=['year', 'hour', 'minute'], inplace=True)
 
         # Make predictions
-        forecasts = self.predictor.predict(prediction_data, known_covariates=known_covariates)
+        forecasts = self.predictor.predict(
+            prediction_data, known_covariates=known_covariates
+        )
         return forecasts
+
 
 # Example usage:
 if __name__ == "__main__":
