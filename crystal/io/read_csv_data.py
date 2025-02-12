@@ -17,7 +17,7 @@ def read_csv_data(path, market):
     # Load data and set the index
     df = pd.read_csv(path)
     df.index = pd.to_datetime(df["von"])
-    df = df[df.index.year == 2021]  # Filter data for year 2021
+    # df = df[df.index.year == 2021]  # Filter data for year 2021
 
     # Generalized market-specific processing
     market_config = {
@@ -48,7 +48,6 @@ def read_csv_data(path, market):
 
     # Set frequency and expected length based on the market
     freq = "15min" if market in ["ida", "idc"] else "1h"
-    expected_length = 35040 if freq == "15min" else 8760
     full_range = pd.date_range(
         start=df["timestamp"].min(), end=df["timestamp"].max(), freq=freq
     )
@@ -63,7 +62,7 @@ def read_csv_data(path, market):
     )
 
     # Check length
-    if len(df) != expected_length:
+    if len(df) != len(full_range):
         raise ValueError(
             f"Dataframe has incorrect length after reindexing: {len(df)} entries for {market} market."
         )
@@ -148,7 +147,7 @@ def feature_engineering(df, market):
     )
 
     # Drop rows with NaNs (from shifting/rolling)
-    df.dropna(inplace=True)
+    # df.dropna(inplace=True)
 
     return df
 

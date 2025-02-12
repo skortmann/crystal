@@ -308,9 +308,13 @@ if __name__ == "__main__":
             # df_test = df_market.iloc[train_size:]  # Hold-out test set for later evaluation
 
             # **Train-Test Split (Time-Based)**
-            day_start_time = pd.to_datetime("2022-09-01 00:00:00")
+            day_start_time = pd.to_datetime("2021-10-01 00:00:00")
+            day_end_time = pd.to_datetime("2022-01-10 23:45:00")
             df_train = df_market.loc[df_market["timestamp"] <= day_start_time]
-            df_test = df_market.loc[df_market["timestamp"] > day_start_time]
+            df_test = df_market.loc[
+                (df_market["timestamp"] > day_start_time)
+                & (df_market["timestamp"] <= day_end_time)
+            ]
 
             # Save test set separately for later evaluation
             test_file = paths.results_dir / f"{market}_test_set.csv"
