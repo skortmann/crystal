@@ -4,8 +4,8 @@
 """
 Small description of path_config
 
-Copyright (c) by Institute for High Voltage Equipment and Grids, 
-Digitalization and Energy Economics (IAEW), RWTH Aachen University, 
+Copyright (c) by Institute for High Voltage Equipment and Grids,
+Digitalization and Energy Economics (IAEW), RWTH Aachen University,
 28.01.2025, s.kortmann. All rights reserved.
 """
 import pathlib
@@ -14,6 +14,7 @@ import yaml
 import os
 from datetime import datetime
 from typing import Any, Dict
+
 
 class Scenario:
     """
@@ -48,7 +49,7 @@ class Scenario:
         Args:
             file_path (str): The file path to save the YAML configuration.
         """
-        with open(file_path, 'w') as yaml_file:
+        with open(file_path, "w") as yaml_file:
             yaml.dump(self.parameters, yaml_file, default_flow_style=False)
 
     @classmethod
@@ -62,7 +63,7 @@ class Scenario:
         Returns:
             Scenario: An instance of the Scenario class.
         """
-        with open(file_path, 'r') as yaml_file:
+        with open(file_path, "r") as yaml_file:
             parameters = yaml.safe_load(yaml_file)
         return cls(**parameters)
 
@@ -79,6 +80,7 @@ class Scenario:
         if not callable(runner_function):
             raise ValueError("runner_function must be callable.")
         return runner_function(**self.parameters)
+
 
 class Paths:
     """
@@ -115,10 +117,11 @@ class Paths:
         Returns:
             str: The path to the scenario's results directory.
         """
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        scenario_dir = os.path.join(self.results_dir, f"{scenario_name}_{timestamp}")
+        # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        scenario_dir = os.path.join(self.results_dir, f"{scenario_name}")
         os.makedirs(scenario_dir, exist_ok=True)
         return scenario_dir
+
 
 # Example usage
 if __name__ == "__main__":
@@ -127,9 +130,15 @@ if __name__ == "__main__":
 
     # Define multiple scenarios
     scenarios = [
-        Scenario(name="Scenario 1", duration=24, battery_capacity=100, fcr_allocation=50),
-        Scenario(name="Scenario 2", duration=48, battery_capacity=200, fcr_allocation=75),
-        Scenario(name="Scenario 3", duration=72, battery_capacity=150, fcr_allocation=60)
+        Scenario(
+            name="Scenario 1", duration=24, battery_capacity=100, fcr_allocation=50
+        ),
+        Scenario(
+            name="Scenario 2", duration=48, battery_capacity=200, fcr_allocation=75
+        ),
+        Scenario(
+            name="Scenario 3", duration=72, battery_capacity=150, fcr_allocation=60
+        ),
     ]
 
     # Define a sample runner function
@@ -144,7 +153,7 @@ if __name__ == "__main__":
 
     # Run all scenarios and save their configurations
     for scenario in scenarios:
-        result_dir = paths.get_scenario_results_path(scenario.parameters['name'])
+        result_dir = paths.get_scenario_results_path(scenario.parameters["name"])
         scenario_yaml_path = os.path.join(result_dir, "config.yaml")
         scenario.to_yaml(scenario_yaml_path)
         result = scenario.run(sample_runner)

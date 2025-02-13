@@ -35,8 +35,8 @@ optimization_scenarios = [
         battery_capacity=1,
         battery_power=1,
         cyclic_constraint=True,
-        risk_factor=0.125,
-        objective="risk",
+        risk_factor=0.05,
+        objective="risk-aware",
         optimization_method="Fixed",
     ),
     Scenario(
@@ -44,8 +44,8 @@ optimization_scenarios = [
         battery_capacity=1,
         battery_power=1,
         cyclic_constraint=True,
-        risk_factor=0.25,
-        objective="risk",
+        risk_factor=0.125,
+        objective="risk-aware",
         optimization_method="Fixed",
     ),
     Scenario(
@@ -53,8 +53,8 @@ optimization_scenarios = [
         battery_capacity=1,
         battery_power=1,
         cyclic_constraint=True,
-        risk_factor=0.4,
-        objective="risk",
+        risk_factor=0.25,
+        objective="risk-aware",
         optimization_method="Fixed",
     ),
     Scenario(
@@ -63,7 +63,7 @@ optimization_scenarios = [
         battery_power=1,
         cyclic_constraint=True,
         risk_factor=0.0,
-        objective="risk",
+        objective="risk-aware",
         optimization_method="Fixed",
     ),
     Scenario(
@@ -72,7 +72,52 @@ optimization_scenarios = [
         battery_power=1,
         cyclic_constraint=True,
         risk_factor=0.0,
-        objective="risk",
+        objective="risk-aware",
+        optimization_method="Adaptive",
+    ),
+    Scenario(
+        name="Risk Low PWL",
+        battery_capacity=1,
+        battery_power=1,
+        cyclic_constraint=True,
+        risk_factor=0.05,
+        objective="piece-wise",
+        optimization_method="Fixed",
+    ),
+    Scenario(
+        name="Risk Medium PWL",
+        battery_capacity=1,
+        battery_power=1,
+        cyclic_constraint=True,
+        risk_factor=0.125,
+        objective="piece-wise",
+        optimization_method="Fixed",
+    ),
+    Scenario(
+        name="Risk High PWL",
+        battery_capacity=1,
+        battery_power=1,
+        cyclic_constraint=True,
+        risk_factor=0.25,
+        objective="piece-wise",
+        optimization_method="Fixed",
+    ),
+    Scenario(
+        name="No Risk Penalty PWL",
+        battery_capacity=1,
+        battery_power=1,
+        cyclic_constraint=True,
+        risk_factor=0.0,
+        objective="piece-wise",
+        optimization_method="Fixed",
+    ),
+    Scenario(
+        name="Risk Adaptive PWL",
+        battery_capacity=1,
+        battery_power=1,
+        cyclic_constraint=True,
+        risk_factor=0.0,
+        objective="piece-wise",
         optimization_method="Adaptive",
     ),
 ]
@@ -108,9 +153,9 @@ def optimization_runner(
     optimizer = SequentialEnergyArbitrage(
         energy_capacity=battery_capacity,
         power_capacity=battery_power,
+        cyclic_constraint=cyclic_constraint,
         risk_factor=risk_factor,
         optimization_method=optimization_method,
-        cyclic_constraint=cyclic_constraint,
         objective=objective,
     )
 
@@ -272,8 +317,8 @@ if __name__ == "__main__":
     train_forecasting = False
     do_forecasting = False
     evaluate_forecasting = False
-    do_optimization = True
-    post_processing = True
+    do_optimization = False
+    post_processing = False
 
     start_time = time.time()
 
@@ -365,6 +410,10 @@ if __name__ == "__main__":
             df_test = pd.read_csv(
                 paths.results_dir / f"{market}_test_set.csv", parse_dates=["timestamp"]
             )
+
+            print(
+                forecast_models[market].leaderboard(df_test.iloc[:prediction_length])
+            )  # Warm-up the model
 
             all_forecasts = []  # Store all forecasts for this market
 

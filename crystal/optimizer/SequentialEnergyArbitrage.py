@@ -246,7 +246,7 @@ class SequentialEnergyArbitrage:
         )
 
         # Add risk-aware term if applicable
-        if "risk" in self.objective.lower():
+        if "risk-aware" in self.objective.lower():
             objective_terms.append(
                 gp.quicksum(
                     self.dt
@@ -273,9 +273,23 @@ class SequentialEnergyArbitrage:
             )
 
         if "piece-wise" in self.objective.lower():
+            # Auxiliary variables for piecewise-linear transformation
+            z_charge = {
+                t: model_daa.addVar(lb=0, vtype=gp.GRB.CONTINUOUS, name=f"z_charge_{t}")
+                for t in range(TIME_STEPS)
+            }
+            z_discharge = {
+                t: model_daa.addVar(
+                    lb=0, vtype=gp.GRB.CONTINUOUS, name=f"z_discharge_{t}"
+                )
+                for t in range(TIME_STEPS)
+            }
+
             for t in range(TIME_STEPS):
-                model_daa.setPWLObj(
-                    p_discharge_daa[t],  # Decision variable
+                # PWL function for discharging
+                model_daa.addGenConstrPWL(
+                    p_discharge_daa[t],
+                    z_discharge[t],
                     [
                         0,
                         0.2 * self.power_capacity,
@@ -283,26 +297,30 @@ class SequentialEnergyArbitrage:
                         0.6 * self.power_capacity,
                         0.8 * self.power_capacity,
                         1 * self.power_capacity,
-                    ],  # X: Breakpoints
+                    ],
                     [
                         0,
-                        -self.risk_factor
+                        self.risk_factor
                         * self.dt
                         * (daa_price_vector_05[t] - daa_price_vector_04[t]),
-                        -self.risk_factor
+                        self.risk_factor
                         * self.dt
                         * (daa_price_vector_05[t] - daa_price_vector_03[t]),
-                        -self.risk_factor
+                        self.risk_factor
                         * self.dt
                         * (daa_price_vector_05[t] - daa_price_vector_02[t]),
-                        -self.risk_factor
+                        self.risk_factor
                         * self.dt
                         * (daa_price_vector_05[t] - daa_price_vector_01[t]),
-                        -self.risk_factor * self.dt * (daa_price_vector_05[t]),
-                    ],  # Y: Value at breakpoints
+                        self.risk_factor * self.dt * (daa_price_vector_05[t]),
+                    ],
+                    name=f"PWL_Discharge_{t}",
                 )
-                model_daa.setPWLObj(
-                    p_charge_daa[t],  # Decision variable
+
+                # PWL function for charging
+                model_daa.addGenConstrPWL(
+                    p_charge_daa[t],
+                    z_charge[t],
                     [
                         0,
                         0.2 * self.power_capacity,
@@ -310,24 +328,29 @@ class SequentialEnergyArbitrage:
                         0.6 * self.power_capacity,
                         0.8 * self.power_capacity,
                         1 * self.power_capacity,
-                    ],  # X: Breakpoints
+                    ],
                     [
                         0,
-                        -self.risk_factor
+                        self.risk_factor
                         * self.dt
                         * (daa_price_vector_06[t] - daa_price_vector_05[t]),
-                        -self.risk_factor
+                        self.risk_factor
                         * self.dt
                         * (daa_price_vector_07[t] - daa_price_vector_05[t]),
-                        -self.risk_factor
+                        self.risk_factor
                         * self.dt
                         * (daa_price_vector_08[t] - daa_price_vector_05[t]),
-                        -self.risk_factor
+                        self.risk_factor
                         * self.dt
                         * (daa_price_vector_09[t] - daa_price_vector_05[t]),
-                        -self.risk_factor * self.dt * (daa_price_vector_05[t]),
-                    ],  # Y: Value at breakpoints
+                        self.risk_factor * self.dt * (daa_price_vector_05[t]),
+                    ],
+                    name=f"PWL_Charge_{t}",
                 )
+
+            objective_terms.append(
+                gp.quicksum(-(z_discharge[t] + z_charge[t]) for t in range(TIME_STEPS))
+            )
 
         # Combine all selected terms
         model_daa.setObjective(
@@ -610,7 +633,7 @@ class SequentialEnergyArbitrage:
         )
 
         # Add risk-aware term if applicable
-        if "risk" in self.objective.lower():
+        if "risk-aware" in self.objective.lower():
             objective_terms.append(
                 gp.quicksum(
                     self.dt
@@ -637,9 +660,23 @@ class SequentialEnergyArbitrage:
             )
 
         if "piece-wise" in self.objective.lower():
+            # Auxiliary variables for piecewise-linear transformation
+            z_charge = {
+                t: model_ida.addVar(lb=0, vtype=gp.GRB.CONTINUOUS, name=f"z_charge_{t}")
+                for t in range(TIME_STEPS)
+            }
+            z_discharge = {
+                t: model_ida.addVar(
+                    lb=0, vtype=gp.GRB.CONTINUOUS, name=f"z_discharge_{t}"
+                )
+                for t in range(TIME_STEPS)
+            }
+
             for t in range(TIME_STEPS):
-                model_ida.setPWLObj(
-                    p_discharge_ida[t],  # Decision variable
+                # PWL function for discharging
+                model_ida.addGenConstrPWL(
+                    p_discharge_ida[t],
+                    z_discharge[t],
                     [
                         0,
                         0.2 * self.power_capacity,
@@ -647,26 +684,30 @@ class SequentialEnergyArbitrage:
                         0.6 * self.power_capacity,
                         0.8 * self.power_capacity,
                         1 * self.power_capacity,
-                    ],  # X: Breakpoints
+                    ],
                     [
                         0,
-                        -self.risk_factor
+                        self.risk_factor
                         * self.dt
                         * (ida_price_vector_05[t] - ida_price_vector_04[t]),
-                        -self.risk_factor
+                        self.risk_factor
                         * self.dt
                         * (ida_price_vector_05[t] - ida_price_vector_03[t]),
-                        -self.risk_factor
+                        self.risk_factor
                         * self.dt
                         * (ida_price_vector_05[t] - ida_price_vector_02[t]),
-                        -self.risk_factor
+                        self.risk_factor
                         * self.dt
                         * (ida_price_vector_05[t] - ida_price_vector_01[t]),
-                        -self.risk_factor * self.dt * (ida_price_vector_05[t]),
-                    ],  # Y: Value at breakpoints
+                        self.risk_factor * self.dt * (ida_price_vector_05[t]),
+                    ],
+                    name=f"PWL_Discharge_{t}",
                 )
-                model_ida.setPWLObj(
-                    p_charge_ida[t],  # Decision variable
+
+                # PWL function for charging
+                model_ida.addGenConstrPWL(
+                    p_charge_ida[t],
+                    z_charge[t],
                     [
                         0,
                         0.2 * self.power_capacity,
@@ -674,24 +715,29 @@ class SequentialEnergyArbitrage:
                         0.6 * self.power_capacity,
                         0.8 * self.power_capacity,
                         1 * self.power_capacity,
-                    ],  # X: Breakpoints
+                    ],
                     [
                         0,
-                        -self.risk_factor
+                        self.risk_factor
                         * self.dt
                         * (ida_price_vector_06[t] - ida_price_vector_05[t]),
-                        -self.risk_factor
+                        self.risk_factor
                         * self.dt
                         * (ida_price_vector_07[t] - ida_price_vector_05[t]),
-                        -self.risk_factor
+                        self.risk_factor
                         * self.dt
                         * (ida_price_vector_08[t] - ida_price_vector_05[t]),
-                        -self.risk_factor
+                        self.risk_factor
                         * self.dt
                         * (ida_price_vector_09[t] - ida_price_vector_05[t]),
-                        -self.risk_factor * self.dt * (ida_price_vector_05[t]),
-                    ],  # Y: Value at breakpoints
+                        self.risk_factor * self.dt * (ida_price_vector_05[t]),
+                    ],
+                    name=f"PWL_Charge_{t}",
                 )
+
+            objective_terms.append(
+                gp.quicksum(-(z_discharge[t] + z_charge[t]) for t in range(TIME_STEPS))
+            )
 
         # Combine all selected terms
         model_ida.setObjective(
@@ -991,7 +1037,7 @@ class SequentialEnergyArbitrage:
         )
 
         # Add risk-aware term if applicable
-        if "risk" in self.objective.lower():
+        if "risk-aware" in self.objective.lower():
             objective_terms.append(
                 gp.quicksum(
                     self.dt
@@ -1018,9 +1064,23 @@ class SequentialEnergyArbitrage:
             )
 
         if "piece-wise" in self.objective.lower():
+            # Auxiliary variables for piecewise-linear transformation
+            z_charge = {
+                t: model_idc.addVar(lb=0, vtype=gp.GRB.CONTINUOUS, name=f"z_charge_{t}")
+                for t in range(TIME_STEPS)
+            }
+            z_discharge = {
+                t: model_idc.addVar(
+                    lb=0, vtype=gp.GRB.CONTINUOUS, name=f"z_discharge_{t}"
+                )
+                for t in range(TIME_STEPS)
+            }
+
             for t in range(TIME_STEPS):
-                model_idc.setPWLObj(
-                    p_discharge_idc[t],  # Decision variable
+                # PWL function for discharging
+                model_idc.addGenConstrPWL(
+                    p_discharge_idc[t],
+                    z_discharge[t],
                     [
                         0,
                         0.2 * self.power_capacity,
@@ -1028,26 +1088,30 @@ class SequentialEnergyArbitrage:
                         0.6 * self.power_capacity,
                         0.8 * self.power_capacity,
                         1 * self.power_capacity,
-                    ],  # X: Breakpoints
+                    ],
                     [
                         0,
-                        -self.risk_factor
+                        self.risk_factor
                         * self.dt
                         * (idc_price_vector_05[t] - idc_price_vector_04[t]),
-                        -self.risk_factor
+                        self.risk_factor
                         * self.dt
                         * (idc_price_vector_05[t] - idc_price_vector_03[t]),
-                        -self.risk_factor
+                        self.risk_factor
                         * self.dt
                         * (idc_price_vector_05[t] - idc_price_vector_02[t]),
-                        -self.risk_factor
+                        self.risk_factor
                         * self.dt
                         * (idc_price_vector_05[t] - idc_price_vector_01[t]),
-                        -self.risk_factor * self.dt * (idc_price_vector_05[t]),
-                    ],  # Y: Value at breakpoints
+                        self.risk_factor * self.dt * (idc_price_vector_05[t]),
+                    ],
+                    name=f"PWL_Discharge_{t}",
                 )
-                model_idc.setPWLObj(
-                    p_charge_idc[t],  # Decision variable
+
+                # PWL function for charging
+                model_idc.addGenConstrPWL(
+                    p_charge_idc[t],
+                    z_charge[t],
                     [
                         0,
                         0.2 * self.power_capacity,
@@ -1055,24 +1119,29 @@ class SequentialEnergyArbitrage:
                         0.6 * self.power_capacity,
                         0.8 * self.power_capacity,
                         1 * self.power_capacity,
-                    ],  # X: Breakpoints
+                    ],
                     [
                         0,
-                        -self.risk_factor
+                        self.risk_factor
                         * self.dt
                         * (idc_price_vector_06[t] - idc_price_vector_05[t]),
-                        -self.risk_factor
+                        self.risk_factor
                         * self.dt
                         * (idc_price_vector_07[t] - idc_price_vector_05[t]),
-                        -self.risk_factor
+                        self.risk_factor
                         * self.dt
                         * (idc_price_vector_08[t] - idc_price_vector_05[t]),
-                        -self.risk_factor
+                        self.risk_factor
                         * self.dt
                         * (idc_price_vector_09[t] - idc_price_vector_05[t]),
-                        -self.risk_factor * self.dt * (idc_price_vector_05[t]),
-                    ],  # Y: Value at breakpoints
+                        self.risk_factor * self.dt * (idc_price_vector_05[t]),
+                    ],
+                    name=f"PWL_Charge_{t}",
                 )
+
+            objective_terms.append(
+                gp.quicksum(-(z_discharge[t] + z_charge[t]) for t in range(TIME_STEPS))
+            )
 
         # Combine all selected terms
         model_idc.setObjective(
@@ -1110,6 +1179,9 @@ class SequentialEnergyArbitrage:
         }
 
         return self.results_idc
+
+    def algorithmic_idc(self, results_ida):
+        pass
 
 
 if __name__ == "__main__":
