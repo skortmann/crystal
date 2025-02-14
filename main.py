@@ -24,6 +24,11 @@ from crystal import (
     compute_metrics,
     plot_forecast_results,
 )
+import matplotlib.pyplot as plt
+
+if "rwth-latex" in plt.style.available:
+    plt.style.use(["rwth-latex", "blue"])
+plt.rcParams["font.size"] = 12
 
 # Define paths
 paths = Paths()
@@ -70,14 +75,14 @@ optimization_scenarios = [
         risk_factor=0.0,
         objective="risk-aware",
     ),
-    Scenario(
-        name="Risk Adaptive",
-        battery_capacity=1,
-        battery_power=1,
-        cyclic_constraint=True,
-        risk_factor=0.0,
-        objective="risk-aware",
-    ),
+    # Scenario(
+    #     name="Risk Adaptive",
+    #     battery_capacity=1,
+    #     battery_power=1,
+    #     cyclic_constraint=True,
+    #     risk_factor=0.0,
+    #     objective="risk-aware",
+    # ),
     Scenario(
         name="Risk Low PWL",
         battery_capacity=1,
@@ -102,22 +107,14 @@ optimization_scenarios = [
         risk_factor=0.25,
         objective="piece-wise",
     ),
-    Scenario(
-        name="No Risk Penalty PWL",
-        battery_capacity=1,
-        battery_power=1,
-        cyclic_constraint=True,
-        risk_factor=0.0,
-        objective="piece-wise",
-    ),
-    Scenario(
-        name="Risk Adaptive PWL",
-        battery_capacity=1,
-        battery_power=1,
-        cyclic_constraint=True,
-        risk_factor="adaptive",
-        objective="piece-wise",
-    ),
+    # Scenario(
+    #     name="Risk Adaptive PWL",
+    #     battery_capacity=1,
+    #     battery_power=1,
+    #     cyclic_constraint=True,
+    #     risk_factor="adaptive",
+    #     objective="piece-wise",
+    # ),
 ]
 
 
@@ -335,6 +332,12 @@ def optimization_runner(
                     "p_charge_daa_ida_idc": results_idc["p_charge_daa_ida_idc"],
                     "p_discharge_daa_ida_idc": results_idc["p_discharge_daa_ida_idc"],
                     "soc_idc": results_idc["soc_idc"],
+                    "daa_prices": daa_price_vector_true,
+                    "ida_prices": ida_price_vector_true,
+                    "idc_prices": idc_price_vector_true,
+                    "daa_price_forecast": quantiles_daa,
+                    "ida_price_forecast": quantiles_ida,
+                    "idc_price_forecast": quantiles_idc,
                 }
             )
 
@@ -365,8 +368,8 @@ if __name__ == "__main__":
     train_forecasting = False
     do_forecasting = False
     evaluate_forecasting = False
-    do_optimization = True
-    post_processing = False
+    do_optimization = False
+    post_processing = True
 
     start_time = time.time()
 
@@ -650,5 +653,42 @@ if __name__ == "__main__":
                 market,
                 save_path=paths.results_dir / f"{market}_forecast_results.png",
             )
+
+        profits = {}
+
+        # Run all scenarios and save configurations
+        for scenario in optimization_scenarios:
+            name = scenario.parameters["name"]
+            if name == "Perfect Foresight":
+                continue
+            scenario.parameters["result_dir"] = paths.get_scenario_results_path(
+                scenario.parameters["name"]
+            )
+            scenario_file = (
+                Path(scenario.parameters["result_dir"])
+                / f"optimization_results_{name}.csv"
+            )
+            scenario_schedule_file = (
+                Path(scenario.parameters["result_dir"])
+                / f"battery_schedule_{name}.json"
+            )
+
+            optimization_results = pd.read_csv(scenario_file)
+            battery_schedule = pd.read_json(scenario_schedule_file)
+
+            profits[name] = optimization_results["cumulative_profit"].iloc[-1]
+            print(f"💰 Cumulative Profit for {name}: {profits[name]} €")
+
+        # Plot bar chart for profits
+        profits_df = pd.DataFrame(profits, index=[0])
+        plt.figure(figsize=(6.6, 5))
+        profits_df.T.plot(kind="bar", legend=False)
+        plt.xlabel("Scenario")
+        plt.ylabel("Cumulative Profit [€]")
+        plt.title(f"Cumulative Profits for different Scenarios")
+        plt.tight_layout()
+        plt.grid(axis="y")
+        plt.savefig(paths.results_dir / f"profits.pdf")
+        # plt.show()
 
     print(f"\n⏳ Execution Time: {time.time() - start_time:.2f} seconds.")

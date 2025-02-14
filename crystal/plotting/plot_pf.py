@@ -120,12 +120,20 @@ known_covariates["cos_day_of_week"] = np.cos(
 known_covariates["sin_hour_of_day"] = np.sin(2 * np.pi * known_covariates["hour"] / 24)
 known_covariates["cos_hour_of_day"] = np.cos(2 * np.pi * known_covariates["hour"] / 24)
 
+
 # Generate predictions using the best model
-leaderboard = predictor.leaderboard(train_data)
-print(leaderboard)
-models = leaderboard["model"]
-for model in models:
-    print(predictor.predict(train_data, model=model, known_covariates=known_covariates))
+def print_all_model_stats(predictor):
+    leaderboard = predictor.leaderboard(train_data)
+    print(leaderboard)
+    models = leaderboard["model"]
+    for model in models:
+        print(
+            predictor.predict(
+                train_data, model=model, known_covariates=known_covariates
+            )
+        )
+
+
 predictions = predictor.predict(
     train_data, model=best_model, known_covariates=known_covariates
 )
@@ -238,12 +246,12 @@ normalized_df = pd.DataFrame(normalized_predictions)
 # --- Step 2: Create the color palette ---
 cmap = plt.get_cmap("viridis", hours)  # Discrete color map with 24 distinct colors
 
-# --- Step 3: Create the plot for each forecasted hour ---
-plt.figure(figsize=(6.6, 5))
-for hour in range(hours):
-    color = cmap(hour)  # Get the color for the current hour
+# --- Create primary figure ---
+fig, ax1 = plt.subplots(figsize=(6.6, 5))
 
-    # Define the x and y values for quantiles > 0.5 (negative direction)
+for hour in range(hours):
+    color = cmap(hour)
+
     x_neg = [
         float(q) for q in predictions.columns if q not in ["mean"] if float(q) >= 0.5
     ]
@@ -265,20 +273,36 @@ for hour in range(hours):
         if float(q) <= 0.5
     ]
 
-    # Plot both positive and negative deviations using the same color
-    plt.plot(
-        x_neg, y_neg, marker=",", linestyle="-", color=color, label=f"Hour {hour}"
-    )  # Negative x-axis
-    plt.plot(x_pos, y_pos, marker=",", linestyle="-", color=color)  # Positive x-axis
+    ax1.plot(x_neg, y_neg, marker="o", linestyle="-", color=color, label=f"Hour {hour}")
+    ax1.plot(x_pos, y_pos, marker="o", linestyle="-", color=color)
 
-# --- Step 4: Customize plot ---
-plt.xlabel("Quantiles")
-plt.ylabel("Deviation from 0.5 Quantile (€/MWh)")
-plt.title("Prediction Uncertainty for Forecasted Hours")
-plt.legend(loc="upper center", bbox_to_anchor=(0.5, -0.15), ncol=6, frameon=True)
-plt.ylim(0, 14)
-plt.xlim(0, 1)
-plt.grid(True)
+# --- Format primary x-axis (Quantiles) ---
+ax1.set_xlabel("Quantiles")
+ax1.set_ylabel("Deviation from 0.5 Quantile (€/MWh)")
+ax1.set_title("Prediction Uncertainty for Forecasted Hours")
+ax1.legend(loc="upper center", bbox_to_anchor=(0.5, -0.5), ncol=6, frameon=True)
+ax1.set_ylim(0, 14)
+ax1.set_xlim(0, 1)
+ax1.grid(True)
+
+# --- Create secondary x-axis (Power) ---
+ax2 = ax1.twiny()
+
+# Define tick positions and labels for power (example: charge/discharge levels)
+quantile_ticks = [0.1, 0.3, 0.5, 0.7, 0.9]  # Quantiles
+power_ticks = [-1, -0.5, 0, 0.5, 1]  # Example power levels in kW
+
+ax2.set_xticks(quantile_ticks)
+ax2.set_xticklabels(power_ticks)
+
+# Position the second x-axis at the bottom
+ax2.xaxis.set_ticks_position("bottom")
+ax2.xaxis.set_label_position("bottom")
+ax2.spines["bottom"].set_position(("outward", 36))
+
+ax2.set_xlabel("Battery Power $P_{batt}$")
+
+# Save figure
 plt.tight_layout()
 plt.savefig(PROJECT_ROOT / "crystal/results/quantiles_distribution.pdf", dpi=1200)
 # plt.show()
