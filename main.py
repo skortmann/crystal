@@ -18,10 +18,10 @@ import pandas as pd
 from crystal import (
     Paths,
     Scenario,
-    io,
-    forecaster,
-    compute_metrics,
     SequentialEnergyArbitrage,
+    io,
+    Forecaster,
+    compute_metrics,
     plot_forecast_results,
 )
 
@@ -31,13 +31,20 @@ paths = Paths()
 # Define multiple optimization scenarios with different risk factors & objectives
 optimization_scenarios = [
     Scenario(
+        name="Perfect Foresight",
+        battery_capacity=1,
+        battery_power=1,
+        cyclic_constraint=True,
+        risk_factor=0.0,
+        objective="perfect-foresight",
+    ),
+    Scenario(
         name="Risk Low",
         battery_capacity=1,
         battery_power=1,
         cyclic_constraint=True,
         risk_factor=0.05,
         objective="risk-aware",
-        optimization_method="Fixed",
     ),
     Scenario(
         name="Risk Medium",
@@ -46,7 +53,6 @@ optimization_scenarios = [
         cyclic_constraint=True,
         risk_factor=0.125,
         objective="risk-aware",
-        optimization_method="Fixed",
     ),
     Scenario(
         name="Risk High",
@@ -55,7 +61,6 @@ optimization_scenarios = [
         cyclic_constraint=True,
         risk_factor=0.25,
         objective="risk-aware",
-        optimization_method="Fixed",
     ),
     Scenario(
         name="No Risk Penalty",
@@ -64,7 +69,6 @@ optimization_scenarios = [
         cyclic_constraint=True,
         risk_factor=0.0,
         objective="risk-aware",
-        optimization_method="Fixed",
     ),
     Scenario(
         name="Risk Adaptive",
@@ -73,7 +77,6 @@ optimization_scenarios = [
         cyclic_constraint=True,
         risk_factor=0.0,
         objective="risk-aware",
-        optimization_method="Adaptive",
     ),
     Scenario(
         name="Risk Low PWL",
@@ -82,7 +85,6 @@ optimization_scenarios = [
         cyclic_constraint=True,
         risk_factor=0.05,
         objective="piece-wise",
-        optimization_method="Fixed",
     ),
     Scenario(
         name="Risk Medium PWL",
@@ -91,7 +93,6 @@ optimization_scenarios = [
         cyclic_constraint=True,
         risk_factor=0.125,
         objective="piece-wise",
-        optimization_method="Fixed",
     ),
     Scenario(
         name="Risk High PWL",
@@ -100,7 +101,6 @@ optimization_scenarios = [
         cyclic_constraint=True,
         risk_factor=0.25,
         objective="piece-wise",
-        optimization_method="Fixed",
     ),
     Scenario(
         name="No Risk Penalty PWL",
@@ -109,16 +109,14 @@ optimization_scenarios = [
         cyclic_constraint=True,
         risk_factor=0.0,
         objective="piece-wise",
-        optimization_method="Fixed",
     ),
     Scenario(
         name="Risk Adaptive PWL",
         battery_capacity=1,
         battery_power=1,
         cyclic_constraint=True,
-        risk_factor=0.0,
+        risk_factor="adaptive",
         objective="piece-wise",
-        optimization_method="Adaptive",
     ),
 ]
 
@@ -129,7 +127,6 @@ def optimization_runner(
     battery_power,
     cyclic_constraint,
     risk_factor,
-    optimization_method,
     objective,
     **kwargs,
 ):
@@ -155,11 +152,11 @@ def optimization_runner(
         power_capacity=battery_power,
         cyclic_constraint=cyclic_constraint,
         risk_factor=risk_factor,
-        optimization_method=optimization_method,
         objective=objective,
     )
 
     optimization_results = []
+    battery_schedule = []
     revenue_total = 0
 
     # Loop through each day in the forecast data
@@ -175,13 +172,20 @@ def optimization_runner(
                     < day_start + pd.Timedelta(hours=24)
                 )
             ]
-            daa_price_vector_true = market_data["daa"].loc[
-                (market_data["daa"]["timestamp"] >= day_start)
-                & (market_data["daa"]["timestamp"] < day_start + pd.Timedelta(hours=24))
-            ]["value"]
+            daa_price_vector_true = (
+                market_data["daa"]
+                .loc[
+                    (market_data["daa"]["timestamp"] >= day_start)
+                    & (
+                        market_data["daa"]["timestamp"]
+                        < day_start + pd.Timedelta(hours=24)
+                    )
+                ]["value"]
+                .to_numpy()
+            )
 
             # Extend DAA price vector to match time steps
-            daa_price_vector_true = np.repeat(daa_price_vector_true.to_numpy(), 4)
+            daa_price_vector_true = np.repeat(daa_price_vector_true, 4)
 
             if len(day_forecasts_daa_subset) < 24 or len(daa_price_vector_true) < 96:
                 print(
@@ -197,7 +201,7 @@ def optimization_runner(
             quantiles_daa = [np.repeat(q, 4) for q in quantiles_daa]  # Extend forecasts
 
             # Optimize DAA
-            results_daa = optimizer.optimizeDAA(quantiles_daa)
+            results_daa = optimizer.optimizeDAA(quantiles_daa, daa_price_vector_true)
 
             # Load Intraday Auction (IDA) forecasts
             day_forecasts_ida_subset = forecast_results["ida"].loc[
@@ -207,10 +211,17 @@ def optimization_runner(
                     < day_start + pd.Timedelta(hours=24)
                 )
             ]
-            ida_price_vector_true = market_data["ida"].loc[
-                (market_data["ida"]["timestamp"] >= day_start)
-                & (market_data["ida"]["timestamp"] < day_start + pd.Timedelta(hours=24))
-            ]["value"]
+            ida_price_vector_true = (
+                market_data["ida"]
+                .loc[
+                    (market_data["ida"]["timestamp"] >= day_start)
+                    & (
+                        market_data["ida"]["timestamp"]
+                        < day_start + pd.Timedelta(hours=24)
+                    )
+                ]["value"]
+                .to_numpy()
+            )
 
             quantiles_ida = [
                 day_forecasts_ida_subset[f"{q:.1f}"].values
@@ -218,7 +229,9 @@ def optimization_runner(
             ]
 
             # Optimize IDA
-            results_ida = optimizer.optimizeIDA(quantiles_ida, results_daa)
+            results_ida = optimizer.optimizeIDA(
+                quantiles_ida, results_daa, ida_price_vector_true
+            )
 
             # Load Intraday Continuous (IDC) forecasts
             day_forecasts_idc_subset = forecast_results["idc"].loc[
@@ -228,10 +241,17 @@ def optimization_runner(
                     < day_start + pd.Timedelta(hours=24)
                 )
             ]
-            idc_price_vector_true = market_data["idc"].loc[
-                (market_data["idc"]["timestamp"] >= day_start)
-                & (market_data["idc"]["timestamp"] < day_start + pd.Timedelta(hours=24))
-            ]["value"]
+            idc_price_vector_true = (
+                market_data["idc"]
+                .loc[
+                    (market_data["idc"]["timestamp"] >= day_start)
+                    & (
+                        market_data["idc"]["timestamp"]
+                        < day_start + pd.Timedelta(hours=24)
+                    )
+                ]["value"]
+                .to_numpy()
+            )
 
             quantiles_idc = [
                 day_forecasts_idc_subset[f"{q:.1f}"].values
@@ -239,7 +259,9 @@ def optimization_runner(
             ]
 
             # Optimize IDC
-            results_idc = optimizer.optimizeIDC(quantiles_idc, results_ida)
+            results_idc = optimizer.optimizeIDC(
+                quantiles_idc, results_ida, idc_price_vector_true
+            )
 
             # Calculate daily profits
             dt = 1 / 4  # Since each time step is 15 minutes
@@ -283,7 +305,7 @@ def optimization_runner(
             # Store results for the day
             optimization_results.append(
                 {
-                    "day": day_start,
+                    "timestamp": day_start,
                     "revenue_daa": revenue_daa_today,
                     "revenue_ida": revenue_ida_today,
                     "revenue_idc": revenue_idc_today,
@@ -291,6 +313,28 @@ def optimization_runner(
                     + revenue_ida_today
                     + revenue_idc_today,
                     "cumulative_profit": revenue_total,
+                }
+            )
+
+            # Store battery schedule for the day
+            battery_schedule.append(
+                {
+                    "timestamp": day_start,
+                    "p_charge_daa": results_daa["p_charge_daa"],
+                    "p_discharge_daa": results_daa["p_discharge_daa"],
+                    "soc_daa": results_daa["soc_daa"],
+                    "p_charge_ida": results_ida["p_charge_ida"],
+                    "p_charge_ida_close": results_ida["p_charge_ida_close"],
+                    "p_discharge_ida": results_ida["p_discharge_ida"],
+                    "p_discharge_ida_close": results_ida["p_discharge_ida_close"],
+                    "soc_ida": results_ida["soc_ida"],
+                    "p_charge_idc": results_idc["p_charge_idc"],
+                    "p_charge_idc_close": results_idc["p_charge_idc_close"],
+                    "p_discharge_idc": results_idc["p_discharge_idc"],
+                    "p_discharge_idc_close": results_idc["p_discharge_idc_close"],
+                    "p_charge_daa_ida_idc": results_idc["p_charge_daa_ida_idc"],
+                    "p_discharge_daa_ida_idc": results_idc["p_discharge_daa_ida_idc"],
+                    "soc_idc": results_idc["soc_idc"],
                 }
             )
 
@@ -305,11 +349,15 @@ def optimization_runner(
     result_dir = kwargs.get("result_dir", "./results")  # Default directory
     Path(result_dir).mkdir(parents=True, exist_ok=True)
     scenario_file = Path(result_dir) / f"optimization_results_{name}.csv"
+    scenario_schedule_file = Path(result_dir) / f"battery_schedule_{name}.json"
 
     pd.DataFrame(optimization_results).to_csv(scenario_file, index=False)
+    pd.DataFrame(battery_schedule).to_json(
+        scenario_schedule_file, orient="records", date_format="iso"
+    )
 
     print(f"📁 Results Saved: {scenario_file}")
-    return revenue_total
+    return
 
 
 if __name__ == "__main__":
@@ -317,7 +365,7 @@ if __name__ == "__main__":
     train_forecasting = False
     do_forecasting = False
     evaluate_forecasting = False
-    do_optimization = False
+    do_optimization = True
     post_processing = False
 
     start_time = time.time()
@@ -372,7 +420,7 @@ if __name__ == "__main__":
             df_test.to_csv(test_file, index=False)
 
             # Initialize forecaster for each market
-            forecast_models[market] = forecaster.Forecaster(
+            forecast_models[market] = Forecaster(
                 market=market,
                 model_path=paths.model_dir / Path(f"{market}_model"),
                 prediction_length=prediction_length,
@@ -396,8 +444,13 @@ if __name__ == "__main__":
             else:
                 prediction_length = 96
 
+            # Load test set (Ground Truth)
+            df_test = pd.read_csv(
+                paths.results_dir / f"{market}_test_set.csv", parse_dates=["timestamp"]
+            )
+
             # Initialize and load the forecaster for each market
-            forecast_models[market] = forecaster.Forecaster(
+            forecast_models[market] = Forecaster(
                 market=market,
                 model_path=paths.model_dir / Path(f"{market}_model"),
                 prediction_length=prediction_length,
@@ -405,15 +458,6 @@ if __name__ == "__main__":
                 eval_metric="WQL",
             )
             forecast_models[market].load()  # Load the trained model
-
-            # Load test set (Ground Truth)
-            df_test = pd.read_csv(
-                paths.results_dir / f"{market}_test_set.csv", parse_dates=["timestamp"]
-            )
-
-            print(
-                forecast_models[market].leaderboard(df_test.iloc[:prediction_length])
-            )  # Warm-up the model
 
             all_forecasts = []  # Store all forecasts for this market
 
@@ -576,11 +620,12 @@ if __name__ == "__main__":
             scenario.parameters["result_dir"] = paths.get_scenario_results_path(
                 scenario.parameters["name"]
             )
-            scenario.parameters["result"] = scenario.run(optimization_runner)
             scenario_yaml_path = os.path.join(
                 scenario.parameters["result_dir"], "config.yaml"
             )
             scenario.to_yaml(scenario_yaml_path)
+
+            scenario.run(optimization_runner)
 
     if post_processing:
         print("\n🚀 Do postprocesing for each market\n")

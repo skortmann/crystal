@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Small description of optimization_runner
+This script was inspired by FlexPower https://github.com/FlexPwr/bess-optimizer
 
 Copyright (c) by Institute for High Voltage Equipment and Grids,
 Digitalization and Energy Economics (IAEW), RWTH Aachen University,

@@ -1,12 +1,11 @@
-import os
 import numpy as np
-import math
 import pyomo.environ as pyo
-from pyomo.environ import *
 
-import pyomo.opt as po
+"""
+This script was provided under GNU GENERAL PUBLIC LICENSE by FlexPower https://github.com/FlexPwr/bess-optimizer
 
-# stochastische Optimierung: angepasste Zielfunktionen (Optimierung über den Erwartungswert)
+Stochastic optimization: adjusted objective functions (optimization via the expected value)
+"""
 
 
 class energy_arbitrage_stochastic_optimizer:

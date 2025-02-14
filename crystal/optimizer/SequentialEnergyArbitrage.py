@@ -32,10 +32,7 @@ class SequentialEnergyArbitrage:
     ):
 
         self.optimization_method = optimization_method
-        if "Adaptive" in self.optimization_method:
-            self.risk_factor = None
-        else:
-            self.risk_factor = risk_factor
+        self.risk_factor = risk_factor
         self.objective = objective
 
         self.energy_capacity = energy_capacity
@@ -47,7 +44,7 @@ class SequentialEnergyArbitrage:
         self.volume_limit = self.energy_capacity * self.n_cycles
         self.dt = DAY_IN_HOURS / TIME_STEPS
 
-    def optimizeDAA(self, quantile_forecasts):
+    def optimizeDAA(self, quantile_forecasts, daa_price_vector_true):
 
         # Ensure forecasts are provided for all required quantiles
         if len(quantile_forecasts) != 9:
@@ -219,7 +216,7 @@ class SequentialEnergyArbitrage:
             name="discharging_consistency",
         )
 
-        if "Adaptive" in self.optimization_method:
+        if self.risk_factor == "adaptive":
             # Estimate potential profit from arbitrage (difference between min and max quantile forecasts)
             profit_opportunity = np.max(daa_price_vector_05) - np.min(
                 daa_price_vector_05
@@ -352,11 +349,20 @@ class SequentialEnergyArbitrage:
                 gp.quicksum(-(z_discharge[t] + z_charge[t]) for t in range(TIME_STEPS))
             )
 
-        # Combine all selected terms
-        model_daa.setObjective(
-            gp.quicksum(objective_terms),  # Summing all terms dynamically
-            sense=gp.GRB.MAXIMIZE,
-        )
+        if self.objective == "perfect-foresight":
+            model_daa.setObjective(
+                gp.quicksum(
+                    daa_price_vector_true[t] * (p_discharge_daa[t] - p_charge_daa[t])
+                    for t in range(TIME_STEPS)
+                ),
+                sense=gp.GRB.MAXIMIZE,
+            )
+        else:
+            # Combine all selected terms
+            model_daa.setObjective(
+                gp.quicksum(objective_terms),  # Summing all terms dynamically
+                sense=gp.GRB.MAXIMIZE,
+            )
 
         model_daa.optimize()
 
@@ -373,7 +379,7 @@ class SequentialEnergyArbitrage:
 
         return self.results_daa
 
-    def optimizeIDA(self, quantile_forecasts, results_daa):
+    def optimizeIDA(self, quantile_forecasts, results_daa, ida_price_vector_true):
 
         # Ensure forecasts are provided for all required quantiles
         if len(quantile_forecasts) != 9:
@@ -739,11 +745,26 @@ class SequentialEnergyArbitrage:
                 gp.quicksum(-(z_discharge[t] + z_charge[t]) for t in range(TIME_STEPS))
             )
 
-        # Combine all selected terms
-        model_ida.setObjective(
-            gp.quicksum(objective_terms),  # Summing all terms dynamically
-            sense=gp.GRB.MAXIMIZE,
-        )
+        if self.objective == "perfect-foresight":
+            model_ida.setObjective(
+                gp.quicksum(
+                    ida_price_vector_true[t]
+                    * (
+                        p_discharge_ida[t]
+                        + p_discharge_ida_close[t]
+                        - p_charge_ida[t]
+                        - p_charge_ida_close[t]
+                    )
+                    for t in range(TIME_STEPS)
+                ),
+                sense=gp.GRB.MAXIMIZE,
+            )
+        else:
+            # Combine all selected terms
+            model_ida.setObjective(
+                gp.quicksum(objective_terms),  # Summing all terms dynamically
+                sense=gp.GRB.MAXIMIZE,
+            )
 
         model_ida.optimize()
 
@@ -776,7 +797,7 @@ class SequentialEnergyArbitrage:
 
         return self.results_ida
 
-    def optimizeIDC(self, quantile_forecasts, results_ida):
+    def optimizeIDC(self, quantile_forecasts, results_ida, idc_price_vector_true):
 
         # Ensure forecasts are provided for all required quantiles
         if len(quantile_forecasts) != 9:
@@ -1143,11 +1164,26 @@ class SequentialEnergyArbitrage:
                 gp.quicksum(-(z_discharge[t] + z_charge[t]) for t in range(TIME_STEPS))
             )
 
-        # Combine all selected terms
-        model_idc.setObjective(
-            gp.quicksum(objective_terms),  # Summing all terms dynamically
-            sense=gp.GRB.MAXIMIZE,
-        )
+        if self.objective == "perfect-foresight":
+            model_idc.setObjective(
+                gp.quicksum(
+                    idc_price_vector_true[t]
+                    * (
+                        p_discharge_idc[t]
+                        + p_discharge_idc_close[t]
+                        - p_charge_idc[t]
+                        - p_charge_idc_close[t]
+                    )
+                    for t in range(TIME_STEPS)
+                ),
+                sense=gp.GRB.MAXIMIZE,
+            )
+        else:
+            # Combine all selected terms
+            model_idc.setObjective(
+                gp.quicksum(objective_terms),  # Summing all terms dynamically
+                sense=gp.GRB.MAXIMIZE,
+            )
 
         model_idc.optimize()
 
