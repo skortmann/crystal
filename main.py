@@ -36,7 +36,7 @@ paths = Paths()
 # Define multiple optimization scenarios with different risk factors & objectives
 optimization_scenarios = [
     Scenario(
-        name="Perfect Foresight",
+        name="Perfect Foresight (Nominal)",
         battery_capacity=1,
         battery_power=1,
         cyclic_constraint=True,
@@ -44,37 +44,69 @@ optimization_scenarios = [
         objective="perfect-foresight",
     ),
     Scenario(
-        name="Risk Low",
-        battery_capacity=1,
-        battery_power=1,
-        cyclic_constraint=True,
-        risk_factor=0.05,
-        objective="risk-aware",
-    ),
-    Scenario(
-        name="Risk Medium",
-        battery_capacity=1,
-        battery_power=1,
-        cyclic_constraint=True,
-        risk_factor=0.125,
-        objective="risk-aware",
-    ),
-    Scenario(
-        name="Risk High",
-        battery_capacity=1,
-        battery_power=1,
-        cyclic_constraint=True,
-        risk_factor=0.25,
-        objective="risk-aware",
-    ),
-    Scenario(
-        name="No Risk Penalty",
-        battery_capacity=1,
-        battery_power=1,
+        name="Perfect Foresight (Low Capacity, Low Power)",
+        battery_capacity=10,
+        battery_power=10,
         cyclic_constraint=True,
         risk_factor=0.0,
-        objective="risk-aware",
+        objective="perfect-foresight",
     ),
+    Scenario(
+        name="Perfect Foresight (High Capacity, Low Power)",
+        battery_capacity=20,
+        battery_power=10,
+        cyclic_constraint=True,
+        risk_factor=0.0,
+        objective="perfect-foresight",
+    ),
+    Scenario(
+        name="Perfect Foresight (High Power, Low Capacity)",
+        battery_capacity=10,
+        battery_power=20,
+        cyclic_constraint=True,
+        risk_factor=0.0,
+        objective="perfect-foresight",
+    ),
+    Scenario(
+        name="Perfect Foresight (High Power, High Capacity)",
+        battery_capacity=20,
+        battery_power=20,
+        cyclic_constraint=True,
+        risk_factor=0.0,
+        objective="perfect-foresight",
+    ),
+    # Scenario(
+    #     name="Risk Low",
+    #     battery_capacity=1,
+    #     battery_power=1,
+    #     cyclic_constraint=True,
+    #     risk_factor=0.05,
+    #     objective="risk-aware",
+    # ),
+    # Scenario(
+    #     name="Risk Medium",
+    #     battery_capacity=1,
+    #     battery_power=1,
+    #     cyclic_constraint=True,
+    #     risk_factor=0.125,
+    #     objective="risk-aware",
+    # ),
+    # Scenario(
+    #     name="Risk High",
+    #     battery_capacity=1,
+    #     battery_power=1,
+    #     cyclic_constraint=True,
+    #     risk_factor=0.25,
+    #     objective="risk-aware",
+    # ),
+    # Scenario(
+    #     name="No Risk Penalty",
+    #     battery_capacity=1,
+    #     battery_power=1,
+    #     cyclic_constraint=True,
+    #     risk_factor=0.0,
+    #     objective="risk-aware",
+    # ),
     # Scenario(
     #     name="Risk Adaptive",
     #     battery_capacity=1,
@@ -83,30 +115,30 @@ optimization_scenarios = [
     #     risk_factor=0.0,
     #     objective="risk-aware",
     # ),
-    Scenario(
-        name="Risk Low PWL",
-        battery_capacity=1,
-        battery_power=1,
-        cyclic_constraint=True,
-        risk_factor=0.05,
-        objective="piece-wise",
-    ),
-    Scenario(
-        name="Risk Medium PWL",
-        battery_capacity=1,
-        battery_power=1,
-        cyclic_constraint=True,
-        risk_factor=0.125,
-        objective="piece-wise",
-    ),
-    Scenario(
-        name="Risk High PWL",
-        battery_capacity=1,
-        battery_power=1,
-        cyclic_constraint=True,
-        risk_factor=0.25,
-        objective="piece-wise",
-    ),
+    # Scenario(
+    #     name="Risk Low PWL",
+    #     battery_capacity=1,
+    #     battery_power=1,
+    #     cyclic_constraint=True,
+    #     risk_factor=0.05,
+    #     objective="piece-wise",
+    # ),
+    # Scenario(
+    #     name="Risk Medium PWL",
+    #     battery_capacity=1,
+    #     battery_power=1,
+    #     cyclic_constraint=True,
+    #     risk_factor=0.125,
+    #     objective="piece-wise",
+    # ),
+    # Scenario(
+    #     name="Risk High PWL",
+    #     battery_capacity=1,
+    #     battery_power=1,
+    #     cyclic_constraint=True,
+    #     risk_factor=0.25,
+    #     objective="piece-wise",
+    # ),
     # Scenario(
     #     name="Risk Adaptive PWL",
     #     battery_capacity=1,
@@ -655,12 +687,13 @@ if __name__ == "__main__":
             )
 
         profits = {}
+        optimization_results = {}
+        battery_schedule = {}
+        results2plot = []
 
         # Run all scenarios and save configurations
         for scenario in optimization_scenarios:
             name = scenario.parameters["name"]
-            if name == "Perfect Foresight":
-                continue
             scenario.parameters["result_dir"] = paths.get_scenario_results_path(
                 scenario.parameters["name"]
             )
@@ -673,19 +706,174 @@ if __name__ == "__main__":
                 / f"battery_schedule_{name}.json"
             )
 
-            optimization_results = pd.read_csv(scenario_file)
-            battery_schedule = pd.read_json(scenario_schedule_file)
+            optimization_results[name] = pd.read_csv(scenario_file)
+            battery_schedule[name] = pd.read_json(scenario_schedule_file)
 
-            profits[name] = optimization_results["cumulative_profit"].iloc[-1]
+            profits[name] = optimization_results[name]["cumulative_profit"].iloc[-1]
             print(f"💰 Cumulative Profit for {name}: {profits[name]} €")
+
+            results2plot.append(name)
+
+        # Plot the battery schedule for the last day
+        fig, axes = plt.subplots(
+            nrows=len(results2plot) + 1,
+            figsize=(6.6, len(results2plot) * 5),
+            sharex=True,
+        )
+
+        # First two subplots: Charging and Discharging Side by Side
+        time_range = np.arange(96)
+        for idx, idx_name in enumerate(results2plot):
+            power = battery_schedule[idx_name].iloc[-1]
+            axes[idx].bar(
+                time_range,
+                [-x for x in power["p_charge_daa_ida_idc"]],
+                label=f"$P_{{ch}}$ for Scenario {idx_name}",
+                color="#57ab27",
+            )
+            axes[idx].bar(
+                time_range,
+                power["p_discharge_daa_ida_idc"],
+                label=f"$P_{{dch}}$ for Scenario {idx_name}",
+                color="#e30066",
+            )
+            axes[idx].set_ylabel("Power [MW]")
+            axes[idx].set_title(f"Battery Schedule - {idx_name}")
+            axes[idx].legend(loc="upper left")
+            axes[idx].set_ylim(-1, 1)
+            # add grid
+            axes[idx].grid(axis="y", alpha=0.3)
+
+        # Third subplot: Forecast with Fill Between
+        name = results2plot[0]
+        last_day_schedule = battery_schedule[name].iloc[-1]
+        axes[len(results2plot)].plot(
+            last_day_schedule["daa_prices"],
+            label="Actual Prices",
+            color="black",
+            linestyle="-",
+        )
+        axes[len(results2plot)].plot(
+            last_day_schedule["daa_price_forecast"][4],
+            label="Mean Forecast",
+            color="#e30066",
+            linestyle="--",
+        )
+        axes[len(results2plot)].fill_between(
+            range(len(last_day_schedule["daa_price_forecast"][0])),
+            last_day_schedule["daa_price_forecast"][0],
+            last_day_schedule["daa_price_forecast"][-1],
+            color="#00549f",
+            alpha=0.3,
+            label="90-10\% Quantile",
+        )
+        axes[len(results2plot)].plot(
+            last_day_schedule["daa_price_forecast"][0],
+            label="10\% Quantile",
+            color="#00549f",
+        )
+        axes[len(results2plot)].plot(
+            last_day_schedule["daa_price_forecast"][-1],
+            label="90\% Quantile",
+            color="#00549f",
+        )
+        axes[len(results2plot)].set_xlabel("Time")
+        axes[len(results2plot)].set_ylabel("Price")
+        axes[len(results2plot)].legend(loc="upper left")
+        axes[len(results2plot)].grid(axis="y", alpha=0.3)
+
+        plt.tight_layout()
+        plt.savefig(paths.results_dir / f"battery_schedule.pdf")
+        # plt.show()
+
+        # Plot the battery schedule for the last day
+        fig, axes = plt.subplots(
+            nrows=len(results2plot), figsize=(6.6, len(results2plot) * 3.5), sharex=True
+        )
+
+        # First two subplots: Charging and Discharging Side by Side
+        time_range = np.arange(96)
+        for idx, idx_name in enumerate(results2plot):
+            power = battery_schedule[idx_name].iloc[-1]
+
+            power["p_net_daa_ida_idc"] = np.subtract(
+                power["p_discharge_daa_ida_idc"], power["p_charge_daa_ida_idc"]
+            )
+
+            axes[idx].plot(
+                time_range,
+                [x for x in power["p_net_daa_ida_idc"]],
+                label=f"$P_{{net}}$ for Scenario {idx_name}",
+                color="#00549f",
+            )
+            axes[idx].set_ylabel("Power [MW]")
+            axes[idx].set_title(f"Battery Schedule - {idx_name}")
+            axes[idx].legend(loc="upper left")
+            # axes[idx].set_ylim(-1, 1)
+            # add grid
+            axes[idx].grid(axis="y", alpha=0.3)
+
+        plt.tight_layout()
+        plt.savefig(paths.results_dir / f"battery_operational_schedule.pdf")
+        # plt.show()
+
+        # Plot the battery schedule for the last day
+        fig, axes = plt.subplots(
+            nrows=len(results2plot), figsize=(6.6, len(results2plot) * 3.5), sharex=True
+        )
+
+        # First two subplots: Charging and Discharging Side by Side
+        time_range = np.arange(96)
+        for idx, idx_name in enumerate(results2plot):
+            power = battery_schedule[idx_name].iloc[-1]
+
+            # Column to normalize
+            column_to_normalize = ["p_discharge_daa_ida_idc", "p_charge_daa_ida_idc"]
+
+            for column in column_to_normalize:
+
+                # Min-Max Normalization for lists
+                min_x = min(lst for lst in power[column])
+                max_x = max(lst for lst in power[column])
+
+                power[column + "_pu"] = [
+                    (x - min_x) / (max_x - min_x) for x in power[column]
+                ]
+
+            power["p_net_daa_ida_idc_pu"] = np.subtract(
+                power["p_discharge_daa_ida_idc_pu"], power["p_charge_daa_ida_idc_pu"]
+            )
+
+            axes[idx].plot(
+                time_range,
+                [x for x in power["p_net_daa_ida_idc_pu"]],
+                label=f"$P_{{net}}$ for Scenario {idx_name}",
+                color="#00549f",
+            )
+            axes[idx].set_ylabel("Power [MW (p.u.)]")
+            axes[idx].set_title(f"Battery Schedule - {idx_name}")
+            axes[idx].legend(loc="upper left")
+            axes[idx].set_ylim(-1, 1)
+            # add grid
+            axes[idx].grid(axis="y", alpha=0.3)
+
+        plt.tight_layout()
+        plt.savefig(paths.results_dir / f"battery_p_u_schedule.pdf")
+        # plt.show()
+
+        # Modify x-axis labels to enforce line breaks before "("
+        formatted_labels = [label.replace(" (", "\n(") for label in profits.keys()]
 
         # Plot bar chart for profits
         profits_df = pd.DataFrame(profits, index=[0])
         plt.figure(figsize=(6.6, 5))
         profits_df.T.plot(kind="bar", legend=False)
+        plt.xticks(
+            ticks=range(len(formatted_labels)), labels=formatted_labels, rotation=90
+        )  # Apply formatted labels
         plt.xlabel("Scenario")
         plt.ylabel("Cumulative Profit [€]")
-        plt.title(f"Cumulative Profits for different Scenarios")
+        plt.title("Cumulative Profits for different Scenarios")
         plt.tight_layout()
         plt.grid(axis="y")
         plt.savefig(paths.results_dir / f"profits.pdf")

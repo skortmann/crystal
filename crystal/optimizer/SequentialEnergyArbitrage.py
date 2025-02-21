@@ -11,9 +11,6 @@ Digitalization and Energy Economics (IAEW), RWTH Aachen University,
 import gurobipy as gp
 
 gp.setParam("OutputFlag", 0)
-import numpy as np
-
-np.seed = 42
 
 DAY_IN_HOURS = 24
 TIME_STEPS = 96
@@ -1221,23 +1218,28 @@ class SequentialEnergyArbitrage:
 
 
 if __name__ == "__main__":
+    import numpy as np
 
+    np.seed = 42
     gp.setParam("OutputFlag", 1)
 
     sea = SequentialEnergyArbitrage()
     # Create 9 x 96 dummy forecasts with random values
     dummy_forecasts = np.random.randn(9, 96) * 120
-    results_daa = sea.optimizeDAA(dummy_forecasts)
+    dummy_true = np.random.randn(1, 96) * 100
+    results_daa = sea.optimizeDAA(dummy_forecasts, dummy_true)
     dummy_forecasts = np.random.randn(9, 96) * 240
-    results_ida = sea.optimizeIDA(dummy_forecasts, results_daa)
+    dummy_true = np.random.randn(1, 96) * 200
+    results_ida = sea.optimizeIDA(dummy_forecasts, results_daa, dummy_true)
     dummy_forecasts = np.random.randn(9, 96) * 360
-    results_idc = sea.optimizeIDC(dummy_forecasts, results_ida)
+    dummy_true = np.random.randn(1, 96) * 300
+    results_idc = sea.optimizeIDC(dummy_forecasts, results_ida, dummy_true)
 
-    # Transform results into a pandas DataFrame and save as xlsx
-    import pandas as pd
+    # # Transform results into a pandas DataFrame and save as xlsx
+    # import pandas as pd
 
-    results_df = pd.DataFrame(results_idc)
-    results_df.to_excel("results.xlsx", index=False)
+    # results_df = pd.DataFrame(results_idc)
+    # results_df.to_excel("results.xlsx", index=False)
 
     # plot profile
     import matplotlib.pyplot as plt
