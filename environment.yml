@@ -3,7 +3,7 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - cudatoolkit=11.3.1
+  - cudatoolkit
   - pip
   - python=3.11
   - setuptools

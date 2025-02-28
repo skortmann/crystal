@@ -18,10 +18,10 @@ import pandas as pd
 from crystal import (
     Paths,
     Scenario,
-    SequentialEnergyArbitrage,
     io,
     Forecaster,
     compute_metrics,
+    optimization_runner_gurobi,
     plot_forecast_results,
 )
 import matplotlib.pyplot as plt
@@ -42,6 +42,7 @@ optimization_scenarios = [
         cyclic_constraint=True,
         risk_factor=0.0,
         objective="perfect-foresight",
+        efficiency=0.95,
     ),
     Scenario(
         name="Perfect Foresight (Low Capacity, Low Power)",
@@ -50,6 +51,7 @@ optimization_scenarios = [
         cyclic_constraint=True,
         risk_factor=0.0,
         objective="perfect-foresight",
+        cell_type = "LFP",
     ),
     Scenario(
         name="Perfect Foresight (High Capacity, Low Power)",
@@ -75,332 +77,87 @@ optimization_scenarios = [
         risk_factor=0.0,
         objective="perfect-foresight",
     ),
-    # Scenario(
-    #     name="Risk Low",
-    #     battery_capacity=1,
-    #     battery_power=1,
-    #     cyclic_constraint=True,
-    #     risk_factor=0.05,
-    #     objective="risk-aware",
-    # ),
-    # Scenario(
-    #     name="Risk Medium",
-    #     battery_capacity=1,
-    #     battery_power=1,
-    #     cyclic_constraint=True,
-    #     risk_factor=0.125,
-    #     objective="risk-aware",
-    # ),
-    # Scenario(
-    #     name="Risk High",
-    #     battery_capacity=1,
-    #     battery_power=1,
-    #     cyclic_constraint=True,
-    #     risk_factor=0.25,
-    #     objective="risk-aware",
-    # ),
-    # Scenario(
-    #     name="No Risk Penalty",
-    #     battery_capacity=1,
-    #     battery_power=1,
-    #     cyclic_constraint=True,
-    #     risk_factor=0.0,
-    #     objective="risk-aware",
-    # ),
-    # Scenario(
-    #     name="Risk Adaptive",
-    #     battery_capacity=1,
-    #     battery_power=1,
-    #     cyclic_constraint=True,
-    #     risk_factor=0.0,
-    #     objective="risk-aware",
-    # ),
-    # Scenario(
-    #     name="Risk Low PWL",
-    #     battery_capacity=1,
-    #     battery_power=1,
-    #     cyclic_constraint=True,
-    #     risk_factor=0.05,
-    #     objective="piece-wise",
-    # ),
-    # Scenario(
-    #     name="Risk Medium PWL",
-    #     battery_capacity=1,
-    #     battery_power=1,
-    #     cyclic_constraint=True,
-    #     risk_factor=0.125,
-    #     objective="piece-wise",
-    # ),
-    # Scenario(
-    #     name="Risk High PWL",
-    #     battery_capacity=1,
-    #     battery_power=1,
-    #     cyclic_constraint=True,
-    #     risk_factor=0.25,
-    #     objective="piece-wise",
-    # ),
-    # Scenario(
-    #     name="Risk Adaptive PWL",
-    #     battery_capacity=1,
-    #     battery_power=1,
-    #     cyclic_constraint=True,
-    #     risk_factor="adaptive",
-    #     objective="piece-wise",
-    # ),
+    Scenario(
+        name="Risk Low",
+        battery_capacity=1,
+        battery_power=1,
+        cyclic_constraint=True,
+        risk_factor=0.05,
+        objective="risk-aware",
+    ),
+    Scenario(
+        name="Risk Medium",
+        battery_capacity=1,
+        battery_power=1,
+        cyclic_constraint=True,
+        risk_factor=0.125,
+        objective="risk-aware",
+    ),
+    Scenario(
+        name="Risk High",
+        battery_capacity=1,
+        battery_power=1,
+        cyclic_constraint=True,
+        risk_factor=0.25,
+        objective="risk-aware",
+    ),
+    Scenario(
+        name="No Risk Penalty",
+        battery_capacity=1,
+        battery_power=1,
+        cyclic_constraint=True,
+        risk_factor=0.0,
+        objective="risk-aware",
+    ),
+    Scenario(
+        name="Risk Adaptive",
+        battery_capacity=1,
+        battery_power=1,
+        cyclic_constraint=True,
+        risk_factor=0.0,
+        objective="risk-aware",
+    ),
+    Scenario(
+        name="Risk Low PWL",
+        battery_capacity=1,
+        battery_power=1,
+        cyclic_constraint=True,
+        risk_factor=0.05,
+        objective="piece-wise",
+    ),
+    Scenario(
+        name="Risk Medium PWL",
+        battery_capacity=1,
+        battery_power=1,
+        cyclic_constraint=True,
+        risk_factor=0.125,
+        objective="piece-wise",
+    ),
+    Scenario(
+        name="Risk High PWL",
+        battery_capacity=1,
+        battery_power=1,
+        cyclic_constraint=True,
+        risk_factor=0.25,
+        objective="piece-wise",
+    ),
+    Scenario(
+        name="Risk Adaptive PWL",
+        battery_capacity=1,
+        battery_power=1,
+        cyclic_constraint=True,
+        risk_factor="adaptive",
+        objective="piece-wise",
+    ),
 ]
-
-
-def optimization_runner(
-    name,
-    battery_capacity,
-    battery_power,
-    cyclic_constraint,
-    risk_factor,
-    objective,
-    **kwargs,
-):
-    """
-    Runs the SequentialEnergyArbitrage optimization framework for a given scenario.
-
-    Parameters:
-    - name: str -> Scenario name.
-    - battery_capacity: int -> Energy capacity of the battery (MWh).
-    - battery_power: int -> Power capacity of the battery (MW).
-    - risk_factor: float -> Risk adjustment factor.
-    - optimization_method: str -> Strategy name (e.g., "Risk Adaptive", "Risk High").
-    - kwargs: dict -> Additional arguments (e.g., result directory).
-
-    Returns:
-    - revenue_total: float -> Total revenue for the scenario.
-    """
-    print(f"\n⚡ Running Optimization for Scenario: {name}\n")
-
-    # Initialize the optimizer
-    optimizer = SequentialEnergyArbitrage(
-        energy_capacity=battery_capacity,
-        power_capacity=battery_power,
-        cyclic_constraint=cyclic_constraint,
-        risk_factor=risk_factor,
-        objective=objective,
-    )
-
-    optimization_results = []
-    battery_schedule = []
-    revenue_total = 0
-
-    # Loop through each day in the forecast data
-    for day_start in tqdm(
-        forecast_results["idc"]["timestamp"][::96], desc=f"Optimizing {name}"
-    ):
-        try:
-            # Load Day-Ahead Auction (DAA) forecasts
-            day_forecasts_daa_subset = forecast_results["daa"].loc[
-                (forecast_results["daa"]["timestamp"] >= day_start)
-                & (
-                    forecast_results["daa"]["timestamp"]
-                    < day_start + pd.Timedelta(hours=24)
-                )
-            ]
-            daa_price_vector_true = (
-                market_data["daa"]
-                .loc[
-                    (market_data["daa"]["timestamp"] >= day_start)
-                    & (
-                        market_data["daa"]["timestamp"]
-                        < day_start + pd.Timedelta(hours=24)
-                    )
-                ]["value"]
-                .to_numpy()
-            )
-
-            # Extend DAA price vector to match time steps
-            daa_price_vector_true = np.repeat(daa_price_vector_true, 4)
-
-            if len(day_forecasts_daa_subset) < 24 or len(daa_price_vector_true) < 96:
-                print(
-                    f"⚠️ Skipping optimization for {day_start} (Insufficient Forecast Data)"
-                )
-                continue
-
-            # Extract quantile forecasts for DAA
-            quantiles_daa = [
-                day_forecasts_daa_subset[f"{q:.1f}"].values
-                for q in np.arange(0.1, 1.0, 0.1)
-            ]
-            quantiles_daa = [np.repeat(q, 4) for q in quantiles_daa]  # Extend forecasts
-
-            # Optimize DAA
-            results_daa = optimizer.optimizeDAA(quantiles_daa, daa_price_vector_true)
-
-            # Load Intraday Auction (IDA) forecasts
-            day_forecasts_ida_subset = forecast_results["ida"].loc[
-                (forecast_results["ida"]["timestamp"] >= day_start)
-                & (
-                    forecast_results["ida"]["timestamp"]
-                    < day_start + pd.Timedelta(hours=24)
-                )
-            ]
-            ida_price_vector_true = (
-                market_data["ida"]
-                .loc[
-                    (market_data["ida"]["timestamp"] >= day_start)
-                    & (
-                        market_data["ida"]["timestamp"]
-                        < day_start + pd.Timedelta(hours=24)
-                    )
-                ]["value"]
-                .to_numpy()
-            )
-
-            quantiles_ida = [
-                day_forecasts_ida_subset[f"{q:.1f}"].values
-                for q in np.arange(0.1, 1.0, 0.1)
-            ]
-
-            # Optimize IDA
-            results_ida = optimizer.optimizeIDA(
-                quantiles_ida, results_daa, ida_price_vector_true
-            )
-
-            # Load Intraday Continuous (IDC) forecasts
-            day_forecasts_idc_subset = forecast_results["idc"].loc[
-                (forecast_results["idc"]["timestamp"] >= day_start)
-                & (
-                    forecast_results["idc"]["timestamp"]
-                    < day_start + pd.Timedelta(hours=24)
-                )
-            ]
-            idc_price_vector_true = (
-                market_data["idc"]
-                .loc[
-                    (market_data["idc"]["timestamp"] >= day_start)
-                    & (
-                        market_data["idc"]["timestamp"]
-                        < day_start + pd.Timedelta(hours=24)
-                    )
-                ]["value"]
-                .to_numpy()
-            )
-
-            quantiles_idc = [
-                day_forecasts_idc_subset[f"{q:.1f}"].values
-                for q in np.arange(0.1, 1.0, 0.1)
-            ]
-
-            # Optimize IDC
-            results_idc = optimizer.optimizeIDC(
-                quantiles_idc, results_ida, idc_price_vector_true
-            )
-
-            # Calculate daily profits
-            dt = 1 / 4  # Since each time step is 15 minutes
-            revenue_daa_today = (
-                np.sum(
-                    daa_price_vector_true
-                    * (
-                        np.asarray(results_daa["p_discharge_daa"])
-                        - np.asarray(results_daa["p_charge_daa"])
-                    )
-                )
-                * dt
-            )
-            revenue_ida_today = (
-                np.sum(
-                    ida_price_vector_true
-                    * (
-                        np.asarray(results_ida["p_discharge_ida"])
-                        + np.asarray(results_ida["p_discharge_ida_close"])
-                        - np.asarray(results_ida["p_charge_ida"])
-                        - np.asarray(results_ida["p_charge_ida_close"])
-                    )
-                )
-                * dt
-            )
-            revenue_idc_today = (
-                np.sum(
-                    idc_price_vector_true
-                    * (
-                        np.asarray(results_idc["p_discharge_idc"])
-                        + np.asarray(results_idc["p_discharge_idc_close"])
-                        - np.asarray(results_idc["p_charge_idc"])
-                        - np.asarray(results_idc["p_charge_idc_close"])
-                    )
-                )
-                * dt
-            )
-
-            revenue_total += revenue_daa_today + revenue_ida_today + revenue_idc_today
-
-            # Store results for the day
-            optimization_results.append(
-                {
-                    "timestamp": day_start,
-                    "revenue_daa": revenue_daa_today,
-                    "revenue_ida": revenue_ida_today,
-                    "revenue_idc": revenue_idc_today,
-                    "daily_profit": revenue_daa_today
-                    + revenue_ida_today
-                    + revenue_idc_today,
-                    "cumulative_profit": revenue_total,
-                }
-            )
-
-            # Store battery schedule for the day
-            battery_schedule.append(
-                {
-                    "timestamp": day_start,
-                    "p_charge_daa": results_daa["p_charge_daa"],
-                    "p_discharge_daa": results_daa["p_discharge_daa"],
-                    "soc_daa": results_daa["soc_daa"],
-                    "p_charge_ida": results_ida["p_charge_ida"],
-                    "p_charge_ida_close": results_ida["p_charge_ida_close"],
-                    "p_discharge_ida": results_ida["p_discharge_ida"],
-                    "p_discharge_ida_close": results_ida["p_discharge_ida_close"],
-                    "soc_ida": results_ida["soc_ida"],
-                    "p_charge_idc": results_idc["p_charge_idc"],
-                    "p_charge_idc_close": results_idc["p_charge_idc_close"],
-                    "p_discharge_idc": results_idc["p_discharge_idc"],
-                    "p_discharge_idc_close": results_idc["p_discharge_idc_close"],
-                    "p_charge_daa_ida_idc": results_idc["p_charge_daa_ida_idc"],
-                    "p_discharge_daa_ida_idc": results_idc["p_discharge_daa_ida_idc"],
-                    "soc_idc": results_idc["soc_idc"],
-                    "daa_prices": daa_price_vector_true,
-                    "ida_prices": ida_price_vector_true,
-                    "idc_prices": idc_price_vector_true,
-                    "daa_price_forecast": quantiles_daa,
-                    "ida_price_forecast": quantiles_ida,
-                    "idc_price_forecast": quantiles_idc,
-                }
-            )
-
-        except Exception as e:
-            print(f"⚠️ Error processing {day_start} in {name}: {e}")
-            continue
-
-    print(f"\n✅ Optimization Completed for: {name}")
-    print(f"💰 Total Revenue: {revenue_total}")
-
-    # Save results per scenario
-    result_dir = kwargs.get("result_dir", "./results")  # Default directory
-    Path(result_dir).mkdir(parents=True, exist_ok=True)
-    scenario_file = Path(result_dir) / f"optimization_results_{name}.csv"
-    scenario_schedule_file = Path(result_dir) / f"battery_schedule_{name}.json"
-
-    pd.DataFrame(optimization_results).to_csv(scenario_file, index=False)
-    pd.DataFrame(battery_schedule).to_json(
-        scenario_schedule_file, orient="records", date_format="iso"
-    )
-
-    print(f"📁 Results Saved: {scenario_file}")
-    return
 
 
 if __name__ == "__main__":
     data_preprocessing = False
     train_forecasting = False
     do_forecasting = False
-    evaluate_forecasting = False
-    do_optimization = False
+    evaluate_forecasting = True
+    do_optimization = True
     post_processing = True
 
     start_time = time.time()
@@ -660,7 +417,10 @@ if __name__ == "__main__":
             )
             scenario.to_yaml(scenario_yaml_path)
 
-            scenario.run(optimization_runner)
+            scenario.parameters["market_data"] = market_data
+            scenario.parameters["forecast_results"] = forecast_results
+
+            scenario.run(optimization_runner_gurobi)
 
     if post_processing:
         print("\n🚀 Do postprocesing for each market\n")

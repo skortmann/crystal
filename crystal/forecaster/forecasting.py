@@ -82,7 +82,7 @@ class Forecaster:
             num_val_windows=10,
             # refit_full=True,
             refit_every_n_windows=2,
-            time_limit=60 * 90,
+            # time_limit=60 * 90,
             presets="best_quality",
             excluded_model_types=["Chronos"],
         )

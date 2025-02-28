@@ -1214,6 +1214,7 @@ class SequentialEnergyArbitrage:
         return self.results_idc
 
     def algorithmic_idc(self, results_ida):
+        # TODO: MA Tunyan
         pass
 
 
