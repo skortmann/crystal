@@ -42,7 +42,6 @@ optimization_scenarios = [
         cyclic_constraint=True,
         risk_factor=0.0,
         objective="perfect-foresight",
-        efficiency=0.95,
     ),
     Scenario(
         name="Perfect Foresight (Low Capacity, Low Power)",
@@ -51,7 +50,6 @@ optimization_scenarios = [
         cyclic_constraint=True,
         risk_factor=0.0,
         objective="perfect-foresight",
-        cell_type = "LFP",
     ),
     Scenario(
         name="Perfect Foresight (High Capacity, Low Power)",
@@ -153,9 +151,9 @@ optimization_scenarios = [
 
 
 if __name__ == "__main__":
-    data_preprocessing = False
-    train_forecasting = False
-    do_forecasting = False
+    data_preprocessing = True
+    train_forecasting = True
+    do_forecasting = True
     evaluate_forecasting = True
     do_optimization = True
     post_processing = True
