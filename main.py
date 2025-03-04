@@ -42,6 +42,7 @@ optimization_scenarios = [
         cyclic_constraint=True,
         risk_factor=0.0,
         objective="perfect-foresight",
+        ems_type="ems_fcr",
     ),
     Scenario(
         name="Perfect Foresight (Low Capacity, Low Power)",
@@ -151,10 +152,10 @@ optimization_scenarios = [
 
 
 if __name__ == "__main__":
-    data_preprocessing = True
-    train_forecasting = True
-    do_forecasting = True
-    evaluate_forecasting = True
+    data_preprocessing = False
+    train_forecasting = False
+    do_forecasting = False
+    evaluate_forecasting = False
     do_optimization = True
     post_processing = True
 

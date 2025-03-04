@@ -11,6 +11,7 @@ Digitalization and Energy Economics (IAEW), RWTH Aachen University,
 
 import pandas as pd
 import numpy as np
+from sympy import continued_fraction_reduce
 
 
 def read_csv_data(path, market):
@@ -148,6 +149,77 @@ def feature_engineering(df, market):
 
     # Drop rows with NaNs (from shifting/rolling)
     # df.dropna(inplace=True)
+
+    return df
+
+def add_volatility_measures(df, market):
+
+    if not market == "idc":
+        return df
+
+    # Define the Chaikin Volatility function
+    def chaikin_volatility(data, period=10):
+        data['HL'] = data['high'] - data['low']
+        data['CHV'] = data['HL'].ewm(span=period, adjust=False).mean()
+        data['ChaikinVolatility'] = data['CHV'].pct_change(periods=period) * 100
+        return data
+
+    # Apply the Chaikin Volatility function to the data
+    df = chaikin_volatility(df)
+
+    # Define the Donchian Channels function
+    def donchian_channels(data, period=20):
+        data['Upper'] = data['high'].rolling(window=period).max()
+        data['Lower'] = data['low'].rolling(window=period).min()
+        data['Middle'] = (data['Upper'] + data['Lower']) / 2
+        return data
+
+    # Apply the Donchian Channels function to the data
+    df = donchian_channels(df)
+
+    # Define the Keltner Channels function
+    def keltner_channels(data, period=20, atr_multiplier=2):
+        data['TR'] = data[['high', 'low', 'last']].apply(
+            lambda x: max(
+                x['high'] - x['low'],
+                abs(x['high'] - x['last']),
+                abs(x['low'] - x['last'])
+            ), axis=1
+        )
+        data['ATR'] = data['TR'].rolling(window=period).mean()
+        data['Middle'] = data['last'].rolling(window=period).mean()
+        data['Upper'] = data['Middle'] + atr_multiplier * data['ATR']
+        data['Lower'] = data['Middle'] - atr_multiplier * data['ATR']
+        return data
+
+    # Apply the Keltner Channels function to the data
+    df = keltner_channels(df)
+
+    # Define the Relative Volatility Index (RVI) function
+    def relative_volatility_index(data, period=14):
+        # Calculate the difference between the Close and Open prices
+        data['Upward Volatility'] = np.where(data['last'] > data['Open'], data['last'] - data['Open'], 0)
+        data['Total Volatility'] = abs(data['Close'] - data['Open'])
+
+        # Calculate the rolling sum of Upward Volatility and Total Volatility
+        data['Upward Volatility Sum'] = data['Upward Volatility'].rolling(window=period).sum()
+        data['Total Volatility Sum'] = data['Total Volatility'].rolling(window=period).sum()
+
+        # Calculate RVI as the ratio of Upward Volatility to Total Volatility
+        data['RVI'] = data['Upward Volatility Sum'] / data['Total Volatility Sum'] * 100
+
+        return data
+
+    # Apply the Relative Volatility Index (RVI) function to the data
+    # df = relative_volatility_index(df)
+
+    # Define the standard deviation function
+    def standard_deviation(data, period=96):
+        data['Std_Dev'] = data['last'].rolling(window=period).std()
+        return data
+
+    # Apply the standard deviation function to the data
+    df = standard_deviation(df)
 
     return df
 
